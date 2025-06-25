@@ -1,0 +1,3 @@
+[submodule "plugins/bepusdt"]
+	path = plugins/bepusdt
+	url = https://github.com/v03413/Epay-BEpusdt.git
