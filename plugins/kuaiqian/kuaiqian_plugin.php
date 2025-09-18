@@ -45,6 +45,21 @@ class kuaiqian_plugin
 				'type' => 'select',
 				'options' => [0=>'否',1=>'是'],
 			],
+			/*'custom_mch_id' => [
+				'name' => '自定义渠道-商户号',
+				'type' => 'input',
+				'note' => '仅自定义授权渠道需要填写',
+			],
+			'custom_sub_mch_id' => [
+				'name' => '自定义渠道-子商户号',
+				'type' => 'input',
+				'note' => '仅自定义授权渠道需要填写',
+			],
+			'custom_channel_id' => [
+				'name' => '自定义渠道-渠道商商户号',
+				'type' => 'input',
+				'note' => '仅自定义授权渠道需要填写',
+			],*/
 		],
 		'select_alipay' => [
 			'1' => 'H5支付',
@@ -59,63 +74,52 @@ class kuaiqian_plugin
 			'2' => '快捷支付',
 			'3' => '云闪付扫码',
 		],
-		'note' => '将商户证书key.pfx，快钱公钥cert.cer，SSL双向证书ssl.pfx 放到/plugins/kuaiqian/cert/文件夹下', //支付密钥填写说明
+		'note' => '将商户证书key.pfx，快钱公钥cert.cer，SSL双向证书ssl.pfx 放到/plugins/kuaiqian/cert/文件夹下。<br/>证书类型均为RSA，需要在商户证书配置页面，添加人民币网关功能，并选中你正在使用的商户证书。', //支付密钥填写说明
 		'bindwxmp' => true, //是否支持绑定微信公众号
 		'bindwxa' => false, //是否支持绑定微信小程序
 	];
 
 	static public function submit(){
 		global $siteurl, $channel, $order, $sitename, $submit2;
-
-		/*if(!empty($conf['localurl_alipay']) && !strpos($conf['localurl_alipay'],$_SERVER['HTTP_HOST'])){
-			return ['type'=>'jump','url'=>$conf['localurl_alipay'].'pay/submit/'.TRADE_NO.'/'];
-		}*/
 		
 		if($order['typename']=='alipay'){
-			if(in_array('1',$channel['apptype']) && checkmobile()){
-				if(checkwechat()){
-					if(!$submit2){
-						return ['type'=>'jump','url'=>'/pay/submit/'.TRADE_NO.'/'];
-					}
-					return ['type'=>'page','page'=>'wxopen'];
-				}
-				if(checkalipay()){
-					return ['type'=>'jump','url'=>'/pay/alipaywap/'.TRADE_NO.'/'];
-				}
-				return self::mobilepay('27-3');
+			if(checkalipay()){
+				return ['type'=>'jump','url'=>'/pay/alipaywap/'.TRADE_NO.'/'];
 			}else{
 				return ['type'=>'jump','url'=>'/pay/alipay/'.TRADE_NO.'/'];
 			}
 		}elseif($order['typename']=='wxpay'){
-			if(checkwechat() && $channel['appwxmp']>0){
+			if(checkwechat() && in_array('1',$channel['apptype']) && $channel['appwxmp']>0){
 				return ['type'=>'jump','url'=>'/pay/wxjspay/'.TRADE_NO.'/?d=1'];
-			}elseif(checkmobile() && in_array('1',$channel['apptype'])){
-				if(checkalipay()){
-					if(!$submit2){
-						return ['type'=>'jump','url'=>'/pay/submit/'.TRADE_NO.'/'];
-					}
-					return ['type'=>'page','page'=>'wxopen'];
-				}
-				if(checkwechat()){
-					return ['type'=>'jump','url'=>'/pay/wxwappay/'.TRADE_NO.'/'];
-				}
-				return self::mobilepay('26-2');
+			}elseif(checkwechat() && in_array('1',$channel['apptype'])){
+				return ['type'=>'jump','url'=>'/pay/wxwappay/'.TRADE_NO.'/'];
 			}else{
 				return ['type'=>'jump','url'=>'/pay/wxpay/'.TRADE_NO.'/'];
 			}
 		}elseif($order['typename']=='bank'){
-			if(checkmobile() && (in_array('1',$channel['apptype']) || in_array('2',$channel['apptype']))){
-				if(in_array('1',$channel['apptype'])){
-					$payType = '00';
-				}else{
-					$payType = '21';
-				}
-				return self::mobilepay($payType);
-			}elseif(!checkmobile() && in_array('1',$channel['apptype'])){
-				return self::bankpay();
+			return ['type'=>'jump','url'=>'/pay/bank/'.TRADE_NO.'/'];
+		}
+	}
+
+	static public function mapi(){
+		global $siteurl, $channel, $order, $device, $mdevice;
+
+		if($order['typename']=='alipay'){
+			if($mdevice=='alipay'){
+				return self::alipaywap();
 			}else{
-				return ['type'=>'jump','url'=>'/pay/bank/'.TRADE_NO.'/'];
+				return self::alipay();
 			}
+		}elseif($order['typename']=='wxpay'){
+			if($mdevice=='wechat' && in_array('1',$channel['apptype']) && $channel['appwxmp']>0){
+				return self::wxjspay();
+			}elseif($mdevice=='wechat' && in_array('1',$channel['apptype'])){
+				return self::wxwappay();
+			}else{
+				return self::wxpay();
+			}
+		}elseif($order['typename']=='bank'){
+			return self::bank();
 		}
 	}
 	
@@ -189,9 +193,18 @@ class kuaiqian_plugin
 			'payType' => $payType
 		];
 		if($aggregatePay) $params['aggregatePay'] = $aggregatePay;
-		if($channel['own_channel'] == 1){
+		if($channel['own_channel'] == 1 || !empty($channel['custom_mch_id']) && !empty($channel['custom_sub_mch_id']) && !empty($channel['custom_channel_id'])){
 			$params['extDataType'] = 'NB2';
-			$params['extDataContent'] = '<NB2>'.json_encode(['customAuthNetInfo'=>['own_channel'=>'1']]).'</NB2>';
+			$customAuthNetInfo = [];
+			if($channel['own_channel'] == 1){
+				$customAuthNetInfo['own_channel'] = '1';
+			}
+			if(!empty($channel['custom_mch_id']) && !empty($channel['custom_sub_mch_id']) && !empty($channel['custom_channel_id'])){
+				$customAuthNetInfo['mch_id'] = $channel['custom_mch_id'];
+				$customAuthNetInfo['sub_mch_id'] = $channel['custom_sub_mch_id'];
+				$customAuthNetInfo['channel_id'] = $channel['custom_channel_id'];
+			}
+			$params['extDataContent'] = '<NB2>'.json_encode(['customAuthNetInfo'=>$customAuthNetInfo]).'</NB2>';
 		}
 		$params['signMsg'] = $client->generateSign($params);
 		$params['terminalIp'] = $clientip;
@@ -233,9 +246,18 @@ class kuaiqian_plugin
 			'payType' => $payType
 		];
 		if($aggregatePay) $params['aggregatePay'] = $aggregatePay;
-		if($channel['own_channel'] == 1){
+		if($channel['own_channel'] == 1 || !empty($channel['custom_mch_id']) && !empty($channel['custom_sub_mch_id']) && !empty($channel['custom_channel_id'])){
 			$params['extDataType'] = 'NB2';
-			$params['extDataContent'] = '<NB2>'.json_encode(['customAuthNetInfo'=>['own_channel'=>'1']]).'</NB2>';
+			$customAuthNetInfo = [];
+			if($channel['own_channel'] == 1){
+				$customAuthNetInfo['own_channel'] = '1';
+			}
+			if(!empty($channel['custom_mch_id']) && !empty($channel['custom_sub_mch_id']) && !empty($channel['custom_channel_id'])){
+				$customAuthNetInfo['mch_id'] = $channel['custom_mch_id'];
+				$customAuthNetInfo['sub_mch_id'] = $channel['custom_sub_mch_id'];
+				$customAuthNetInfo['channel_id'] = $channel['custom_channel_id'];
+			}
+			$params['extDataContent'] = '<NB2>'.json_encode(['customAuthNetInfo'=>$customAuthNetInfo]).'</NB2>';
 		}
 		$params['signMsg'] = $client->generateSign($params);
 		$params['terminalIp'] = $clientip;
@@ -248,31 +270,26 @@ class kuaiqian_plugin
 			foreach($match[1] as $v){
 				$cookie .= $v.'; ';
 			}
-			if(preg_match('/name=\"selectCheckBox\" value=\"(.*?)\"/i', $res[1], $match)){
-				$type = $match[1];
-				if($type == 'weiXinWapBox'){
-					$url = 'https://www.99bill.com/mobilegateway/weixinWapPrePay.htm';
-					$res = $client->curl($url, '', $cookie);
-					$arr = json_decode($res[1], true);
-					if(isset($arr['openlink'])){
-						return $arr['openlink'];
-					}else{
-						echo $res[1];exit;
-					}
-				}elseif($type == 'zhiFuBaoBox'){
-					$url = 'https://www.99bill.com/mobilegateway/alicsbPay.htm';
-					$res = $client->curl($url, '', $cookie);
-					$arr = json_decode($res[1], true);
-					if(isset($arr['qrcode'])){
-						return $arr['qrcode'];
-					}else{
-						echo $res[1];exit;
-					}
+			if(substr($payType, 0, 2) == '26'){
+				$url = 'https://www.99bill.com/mobilegateway/weixinWapPrePay.htm';
+				$res = $client->curl($url, '', $cookie);
+				$arr = json_decode($res[1], true);
+				if(isset($arr['openlink'])){
+					return $arr['openlink'];
 				}else{
-					throw new Exception('未知的支付类型 '.$type);
+					echo $res[1];exit;
 				}
-			}else{
-				throw new Exception('支付页面解析失败');
+			}elseif(substr($payType, 0, 2) == '27'){
+				$url = 'https://www.99bill.com/mobilegateway/alicsbPay.htm';
+				$res = $client->curl($url, '', $cookie);
+				$arr = json_decode($res[1], true);
+				if(isset($arr['qrcode'])){
+					return $arr['qrcode'];
+				}elseif($res[1]){
+					echo $res[1];exit;
+				}else{
+					throw new Exception('支付异常');
+				}
 			}
 		}else{
 			echo $res[1];exit;
@@ -317,9 +334,14 @@ class kuaiqian_plugin
 	}
 
 	static public function alipay(){
-		global $channel, $siteurl;
+		global $channel, $device, $mdevice, $siteurl;
 
-		if(in_array('2',$channel['apptype'])){
+		if(in_array('1',$channel['apptype']) && (checkmobile() || $device=='mobile')){
+			if(checkwechat()){
+				return ['type'=>'page','page'=>'wxopen'];
+			}
+			return self::mobilepay('27-3');
+		}elseif(in_array('2',$channel['apptype'])){
 			try{
 				$code_url = self::qrcode();
 			}catch(Exception $ex){
@@ -329,7 +351,11 @@ class kuaiqian_plugin
 			$code_url = $siteurl.'pay/alipaywap/'.TRADE_NO.'/';
 		}
 
-		return ['type'=>'qrcode','page'=>'alipay_qrcode','url'=>$code_url];
+		if(checkalipay() || $mdevice=='alipay'){
+			return ['type'=>'jump','url'=>$code_url];
+		}else{
+			return ['type'=>'qrcode','page'=>'alipay_qrcode','url'=>$code_url];
+		}
 	}
 
 	static public function alipaywap(){
@@ -344,7 +370,12 @@ class kuaiqian_plugin
 	static public function wxpay(){
 		global $channel, $siteurl, $device, $mdevice;
 
-		if(in_array('2',$channel['apptype'])){
+		if(in_array('1',$channel['apptype']) && (checkmobile() || $device=='mobile')){
+			if(checkalipay()){
+				return ['type'=>'page','page'=>'wxopen'];
+			}
+			return self::mobilepay('26-2');
+		}elseif(in_array('2',$channel['apptype'])){
 			try{
 				$code_url = self::qrcode();
 			}catch(Exception $ex){
@@ -372,22 +403,6 @@ class kuaiqian_plugin
 			return ['type'=>'error','msg'=>'微信支付下单失败！'.$ex->getMessage()];
 		}
 		return ['type'=>'scheme','page'=>'wxpay_mini','url'=>$jump_url];
-	}
-
-	static public function bank(){
-		global $channel, $siteurl;
-
-		if(in_array('2',$channel['apptype'])){
-			try{
-				$code_url = self::qrcode();
-			}catch(Exception $ex){
-				return ['type'=>'error','msg'=>'微信支付下单失败！'.$ex->getMessage()];
-			}
-		}else{
-			$code_url = $siteurl.'pay/submit/'.TRADE_NO.'/';
-		}
-
-		return ['type'=>'qrcode','page'=>'bank_qrcode','url'=>$code_url];
 	}
 
 	//微信公众号
@@ -460,6 +475,25 @@ class kuaiqian_plugin
 		}else{
 			exit('{"code":-1,"msg":"返回内容解析失败"}');
 		}
+	}
+
+	static public function bank(){
+		global $channel, $device, $siteurl;
+
+		if((checkmobile() || $device=='mobile') && (in_array('1',$channel['apptype']) || in_array('2',$channel['apptype']))){
+			if(in_array('1',$channel['apptype'])){
+				$payType = '00';
+			}else{
+				$payType = '21';
+			}
+			return self::mobilepay($payType);
+		}elseif(!checkmobile() && $device!='mobile' && in_array('1',$channel['apptype'])){
+			return self::bankpay();
+		}else{
+			$code_url = $siteurl.'pay/bank/'.TRADE_NO.'/';
+		}
+
+		return ['type'=>'qrcode','page'=>'bank_qrcode','url'=>$code_url];
 	}
 
 	//异步回调
@@ -648,7 +682,7 @@ class kuaiqian_plugin
 			return ['code'=>-1, 'msg'=>$ex->getMessage()];
 		}
 		
-		require(PAY_ROOT."inc/PayApp.class.php");
+		require(PLUGIN_ROOT."kuaiqian/inc/PayApp.class.php");
 		$client = new \kuaiqian\PayApp($channel['appid'], $channel['appkey'], $channel['appsecret']);
 		$head = [
 			'version' => '1.0.0',
@@ -662,6 +696,7 @@ class kuaiqian_plugin
 			'bankName' => $bank_info['bank_name'],
 			'pan' => $bizParam['payee_account'],
 			'reMark' => $bizParam['transfer_desc'],
+			'notifyUrl' => $conf['localurl'].'pay/transfernotify/'.$channel['id'].'/',
 		];
 
 		try{
@@ -680,7 +715,7 @@ class kuaiqian_plugin
 	static public function transfer_query($channel, $bizParam){
 		if(empty($channel) || empty($bizParam))exit();
 
-		require(PAY_ROOT."inc/PayApp.class.php");
+		require(PLUGIN_ROOT."kuaiqian/inc/PayApp.class.php");
 		$client = new \kuaiqian\PayApp($channel['appid'], $channel['appkey'], $channel['appsecret']);
 		$head = [
 			'version' => '1.0.0',
@@ -697,14 +732,48 @@ class kuaiqian_plugin
 			$result = $client->execute($head, $body);
 			if(!empty($result['detailedList'])){
 				$detail = $result['detailedList'][0];
-				$status = $detail['txnStatus'] == 'S' ? 1 : 0;
-				return ['code'=>0, 'status'=>$status];
+				$paydate = $detail['endDate'];
+				if($detail['txnStatus'] == 'S'){
+					$status = 1;
+				}elseif($detail['txnStatus'] == 'F' || $detail['txnStatus'] == 'R'){
+					$status = 2;
+					$errmsg = $detail['failMessage'];
+				}else{
+					$status = 0;
+				}
+				return ['code'=>0, 'status'=>$status, 'amount'=>$detail['amount'], 'errmsg'=>$errmsg, 'paydate'=>$paydate];
 			}else{
 				return ['code'=>-1, 'msg'=>'['.$result['bizResponseCode'].']'.$result['bizResponseMessage']];
 			}
 		}catch(Exception $ex){
 			return ['code'=>-1, 'msg'=>$ex->getMessage()];
 		}
+	}
+
+	//转账异步回调
+	static public function transfernotify(){
+		global $channel;
+
+		require(PAY_ROOT."inc/PayApp.class.php");
+		
+		$client = new \kuaiqian\PayApp($channel['appid'], $channel['appkey'], $channel['appsecret']);
+		try{
+			$response = $client->notifyProcessTransfer($result);
+		}catch(Exception $ex){
+			return ['type'=>'html','data'=>$ex->getMessage()];
+		}
+
+		$out_biz_no = $result['head']['externalRefNumber'];
+		if($result['body']['txnStatus'] == 'S'){
+			$status = 1;
+			$errmsg = '';
+		}elseif($result['body']['txnStatus'] == 'F' || $result['body']['txnStatus'] == 'R'){
+			$status = 2;
+			$errmsg = $result['body']['bizResponseMessage'];
+		}
+		processTransfer($out_biz_no, $status, $errmsg);
+
+		return ['type'=>'html','data'=>$response];
 	}
 
 	//投诉通知回调

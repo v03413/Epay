@@ -47,7 +47,7 @@ include './head.php';
   </div>
 
 <?php include 'foot.php';?>
-<script src="<?php echo $cdnpublic?>layer/3.1.1/layer.min.js"></script>
+<script src="<?php echo $cdnpublic?>layer/3.1.1/layer.js"></script>
 <script src="../assets/js/bootstrap-table.min.js"></script>
 <script src="../assets/js/bootstrap-table-page-jump-to.min.js"></script>
 <script src="../assets/js/custom.js"></script>
@@ -94,7 +94,11 @@ $(document).ready(function(){
 				field: 'trade_no',
 				title: '关联订单号',
 				formatter: function(value, row, index) {
-					return value?'<a href="./order.php?type=1&kw='+value+'">'+value+'</a>':'无';
+					if(row.type == '代付' || row.type == '代付退回'){
+						return value?'<a href="./transfer.php?bizno='+value+'">'+value+'</a>':'无';
+					}else{
+						return value?'<a href="./order.php?type=1&kw='+value+'">'+value+'</a>':'无';
+					}
 				}
 			},
 		],

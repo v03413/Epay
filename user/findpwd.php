@@ -14,9 +14,8 @@ $_SESSION['csrf_token'] = $csrf_token;
 <title>找回密码 | <?php echo $conf['sitename']?></title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
 <link rel="stylesheet" href="<?php echo $cdnpublic?>twitter-bootstrap/3.4.1/css/bootstrap.min.css" type="text/css" />
-<link rel="stylesheet" href="<?php echo $cdnpublic?>animate.css/3.5.2/animate.min.css" type="text/css" />
+<link rel="stylesheet" href="<?php echo $cdnpublic?>animate.css/3.7.2/animate.min.css" type="text/css" />
 <link rel="stylesheet" href="<?php echo $cdnpublic?>font-awesome/4.7.0/css/font-awesome.min.css" type="text/css" />
-<link rel="stylesheet" href="<?php echo $cdnpublic?>simple-line-icons/2.4.1/css/simple-line-icons.min.css" type="text/css" />
 <link rel="stylesheet" href="./assets/css/font.css" type="text/css" />
 <link rel="stylesheet" href="./assets/css/app.css" type="text/css" />
 <style>input:-webkit-autofill{-webkit-box-shadow:0 0 0px 1000px white inset;-webkit-text-fill-color:#333;}img.logo{width:14px;height:14px;margin:0 5px 0 3px;}</style>
@@ -67,10 +66,22 @@ $_SESSION['csrf_token'] = $csrf_token;
 </div>
 <script src="<?php echo $cdnpublic?>jquery/3.4.1/jquery.min.js"></script>
 <script src="<?php echo $cdnpublic?>twitter-bootstrap/3.4.1/js/bootstrap.min.js"></script>
-<script src="<?php echo $cdnpublic?>layer/3.1.1/layer.min.js"></script>
+<script src="<?php echo $cdnpublic?>layer/3.1.1/layer.js"></script>
 <script src="<?php echo $cdnpublic?>jquery.qrcode/1.0/jquery.qrcode.min.js"></script>
+<script src="<?php echo $cdnpublic?>jsencrypt/3.5.4/jsencrypt.min.js"></script>
 <script src="//static.geetest.com/static/tools/gt.js"></script>
 <script>
+window.appendChildOrg = Element.prototype.appendChild;
+Element.prototype.appendChild = function() {
+    if(arguments[0].tagName == 'SCRIPT'){
+        arguments[0].setAttribute('referrerpolicy', 'no-referrer');
+    }
+    return window.appendChildOrg.apply(this, arguments);
+};
+</script>
+<script src="//static.geetest.com/v4/gt4.js"></script>
+<script>
+const PUBLIC_KEY_PEM = `<?php echo base64ToPem($conf['public_key'], 'PUBLIC KEY')?>`;
 function invokeSettime(obj){
     var countdown=60;
     settime(obj);
@@ -104,7 +115,7 @@ var handlerEmbed = function (captchaObj) {
 		$.ajax({
 			type : "POST",
 			url : "ajax.php?act=sendcode2",
-			data : {type:type,sendto:sendto,geetest_challenge:result.geetest_challenge,geetest_validate:result.geetest_validate,geetest_seccode:result.geetest_seccode},
+			data : {type:type,sendto:sendto,...result},
 			dataType : 'json',
 			success : function(data) {
 				layer.close(ii);
@@ -117,6 +128,8 @@ var handlerEmbed = function (captchaObj) {
 				}
 			} 
 		});
+	}).onError(function(){
+		layer.msg('验证码加载失败，请刷新页面重试', {icon: 5});
 	});
 	$('#sendcode').click(function () {
 		if ($(this).attr("data-lock") === "true") return;
@@ -130,7 +143,11 @@ var handlerEmbed = function (captchaObj) {
 			var reg = /^([a-zA-Z0-9_-])+@([a-zA-Z0-9_-])+(.[a-zA-Z0-9_-])+/;
 			if(!reg.test(sendto)){layer.alert('邮箱格式不正确！');return false;}
 		}
-		captchaObj.verify();
+		if(typeof captchaObj.showCaptcha === 'function'){
+			captchaObj.showCaptcha();
+		}else{
+			captchaObj.verify();
+		}
 	});
 };
 $(document).ready(function(){
@@ -157,13 +174,20 @@ $(document).ready(function(){
 			var reg = /^([a-zA-Z0-9_-])+@([a-zA-Z0-9_-])+(.[a-zA-Z0-9_-])+/;
 			if(!reg.test(account)){layer.alert('邮箱格式不正确！');return false;}
 		}
+		var enc_type = '0';
+		if(PUBLIC_KEY_PEM != ''){
+			const enc = new JSEncrypt();
+			enc.setPublicKey(PUBLIC_KEY_PEM);
+			pwd = enc.encrypt(pwd);
+			if(pwd) enc_type = '1';
+		}
 		var csrf_token=$("input[name='csrf_token']").val();
 		var ii = layer.load(2, {shade:[0.1,'#fff']});
 		$(this).attr("data-lock", "true");
 		$.ajax({
 			type : "POST",
 			url : "ajax.php?act=findpwd",
-			data : {type:type,account:account,code:code,pwd:pwd,csrf_token:csrf_token},
+			data : {type:type,account:account,code:code,pwd:pwd,enc:enc_type,csrf_token:csrf_token},
 			dataType : 'json',
 			success : function(data) {
 				$("#submit").attr("data-lock", "false");
@@ -177,24 +201,29 @@ $(document).ready(function(){
 		});
 	});
 	$.ajax({
-		// 获取id，challenge，success（是否启用failback）
-		url: "ajax.php?act=captcha&t=" + (new Date()).getTime(), // 加随机数防止缓存
+		url: "ajax.php?act=captcha",
 		type: "get",
+		cache: false,
 		dataType: "json",
 		success: function (data) {
-			console.log(data);
-			// 使用initGeetest接口
-			// 参数1：配置参数
-			// 参数2：回调，回调的第一个参数验证码对象，之后可以使用它做appendTo之类的事件
-			initGeetest({
-				width: '100%',
-				gt: data.gt,
-				challenge: data.challenge,
-				new_captcha: data.new_captcha,
-				product: "bind", // 产品形式，包括：float，embed，popup。注意只对PC版验证码有效
-				offline: !data.success // 表示用户后台检测极验服务器是否宕机，一般不需要关注
-				// 更多配置参数请参见：http://www.geetest.com/install/sections/idx-client-sdk.html#config
-			}, handlerEmbed);
+			if(data.version == 1){
+				initGeetest4({
+					captchaId: data.gt,
+					product: 'bind',
+					protocol: 'https://',
+					riskType: 'slide',
+					hideSuccess: true,
+				}, handlerEmbed);
+			}else{
+				initGeetest({
+					width: '100%',
+					gt: data.gt,
+					challenge: data.challenge,
+					new_captcha: data.new_captcha,
+					product: "bind",
+					offline: !data.success
+				}, handlerEmbed);
+			}
 		}
 	});
 });

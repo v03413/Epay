@@ -28,7 +28,7 @@ if(!defined('IN_PLUGIN'))exit();
 <div style="background: #fff;padding: 16px;border-top: 1px solid #d8d8d8;border-bottom: 1px solid #d8d8d8;">
     <div style="display: flex;">
         <span style="font-weight: 400;color: #a1a1a1;width: 40px;">商家</span>
-        <span style="flex:1;text-align: right;color: black;font-weight: 600;font-size: 14px;">在线商城</span>
+        <span style="flex:1;text-align: right;color: black;font-weight: 600;font-size: 14px;">微信支付平台商户</span>
     </div>
 </div>
 
@@ -41,7 +41,7 @@ if(!defined('IN_PLUGIN'))exit();
     支付安全由中国人民财产保险股份有限公司承保
 </div>
 <script src="<?php echo $cdnpublic?>jquery/1.12.4/jquery.min.js"></script>
-<script src="<?php echo $cdnpublic?>layer/3.1.1/layer.min.js"></script>
+<script src="<?php echo $cdnpublic?>layer/3.1.1/layer.js"></script>
 <script>
 	document.body.addEventListener('touchmove', function (event) {
 		event.preventDefault();

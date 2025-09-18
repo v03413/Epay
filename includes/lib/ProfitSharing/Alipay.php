@@ -19,12 +19,36 @@ class Alipay implements IProfitSharing
 	}
 
     //请求分账
-    public function submit($trade_no, $api_trade_no, $account, $name, $money){
-        $type = self::get_alipay_account_type($account);
-
+    public function submit($trade_no, $api_trade_no, $order_money, $info){
+        global $conf;
+        $receivers = [];
+        $allmoney = 0;
+        $rdata = [];
+        foreach($info as $receiver){
+            $money = round(floor($order_money * $receiver['rate']) / 100, 2);
+            $type = self::get_alipay_account_type($receiver['account']);
+            $receivers[] = [
+                'trans_in_type' => $type,
+                'trans_in' => $receiver['account'],
+                'amount' => $money,
+                'desc' => $conf['profits_desc'],
+            ];
+            $allmoney += $money;
+            $rdata[] = ['account'=>$receiver['account'], 'money'=>$money];
+        }
+        $bizContent = array(
+            'out_request_no' => date("YmdHis").rand(11111,99999),
+            'trade_no' => $api_trade_no,
+            'royalty_parameters' => $receivers,
+            'extend_params' => [
+                'royalty_finish' => 'true'
+            ],
+            'royalty_mode' => count($receivers) > 3 ? 'async' : 'sync',
+        );
         try{
-            $result = $this->service->order_settle($api_trade_no, $type, $account, $money);
-            return ['code'=>1, 'msg'=>'分账成功', 'settle_no'=>$result['settle_no']];
+            $result = $this->service->aopExecute('alipay.trade.order.settle', $bizContent);
+            $status = $bizContent['royalty_mode'] == 'sync' ? 1 : 0;
+            return ['code'=>$status, 'msg'=>'分账成功', 'settle_no'=>$result['settle_no'], 'money'=>round($allmoney, 2), 'rdata'=>$rdata];
         } catch (Exception $e) {
             return ['code'=>-1, 'msg'=>$e->getMessage()];
         }
@@ -58,14 +82,29 @@ class Alipay implements IProfitSharing
     }
 
     //分账回退
-    public function return($trade_no, $api_trade_no, $account, $money){
-        $type = self::get_alipay_account_type($account);
-
+    public function return($trade_no, $api_trade_no, $rdata){
+        $out_request_no = date("YmdHis").rand(11111,99999);
+        $receivers = [];
+        foreach($rdata as $receiver){
+            $type = self::get_alipay_account_type($receiver['account']);
+            $receivers[] = [
+                'royalty_type' => 'transfer',
+                'trans_out_type' => $type,
+                'trans_out' => $receiver['account'],
+                'amount' => $receiver['money']
+            ];
+        }
+        $bizContent = array(
+            'trade_no' => $api_trade_no,
+            'refund_amount' => '0',
+            'out_request_no' => $out_request_no,
+            'refund_royalty_parameters' => $receivers
+        );
         try{
-            $this->service->order_settle_refund($api_trade_no, $type, $account, $money);
+            $this->service->aopExecute('alipay.trade.refund', $bizContent);
             return ['code'=>0, 'msg'=>'退分账成功'];
         } catch (Exception $e) {
-            return ['code'=>-1, 'msg'=>$e->getMessage()];
+            return ['code'=>-1, 'msg'=>$e->getMessage().'（提示：分账到个人账户不支持回退，分账接收方需要开启分账回退授权）'];
         }
     }
 

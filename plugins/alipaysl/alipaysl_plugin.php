@@ -12,7 +12,7 @@ class alipaysl_plugin
 			'appid' => [
 				'name' => '应用APPID',
 				'type' => 'input',
-				'note' => '',
+				'note' => '必须使用第三方应用',
 			],
 			'appkey' => [
 				'name' => '支付宝公钥',
@@ -75,7 +75,7 @@ class alipaysl_plugin
 		if($isMobile && in_array('2',$channel['apptype'])){
 			if($conf['alipay_wappaylogin']==1){
 				if($isAlipay){
-					return ['type'=>'jump','url'=>'/pay/submitwap/'.TRADE_NO.'/'];
+					return ['type'=>'jump','url'=>'/pay/submitwap/'.TRADE_NO.'/?d=1'];
 				}else{
 					return ['type'=>'jump','url'=>'/pay/qrcode/'.TRADE_NO.'/'];
 				}
@@ -119,12 +119,12 @@ class alipaysl_plugin
 
 			return ['type'=>'html','data'=>$html];
 		}elseif(in_array('6',$channel['apptype'])){
-			if($conf['alipay_wappaylogin']==1 && !$isAlipay){
+			if($conf['alipay_wappaylogin']==1 && !$isAlipay || $isMobile && !$isAlipay){
 				return ['type'=>'jump','url'=>'/pay/qrcode/'.TRADE_NO.'/'];
 			}
 			return ['type'=>'jump','url'=>'/pay/apppay/'.TRADE_NO.'/?d=1'];
 		}elseif(in_array('7',$channel['apptype'])){
-			return ['type'=>'jump','url'=>'/pay/jsapipay/'.TRADE_NO.'/?d=1'];
+			return ['type'=>'jump','url'=>'/pay/minipay/'.TRADE_NO.'/?d=1'];
 		}elseif(in_array('5',$channel['apptype'])){
 			if($conf['alipay_wappaylogin']==1 && !$isAlipay){
 				return ['type'=>'jump','url'=>'/pay/qrcode/'.TRADE_NO.'/'];
@@ -238,13 +238,17 @@ class alipaysl_plugin
 		$alipay_config = require(PAY_ROOT.'inc/config.php');
 
 		if($conf['alipay_wappaylogin']==1 && checkalipay()){
-			[$user_type, $user_id] = self::oauth($alipay_config);
+			[$user_type, $user_id] = alipay_oauth($alipay_config);
 			$blocks = checkBlockUser($user_id, TRADE_NO);
 			if($blocks) return $blocks;
 		}
 
 		$alipay_config['notify_url'] = $conf['localurl'].'pay/notify/'.TRADE_NO.'/';
-		$alipay_config['return_url'] = $siteurl.'pay/return/'.TRADE_NO.'/';
+		if($_GET['d']=='1'){
+			$alipay_config['return_url'] = $siteurl.'pay/return/'.TRADE_NO.'/';
+		}else{
+			$alipay_config['return_url'] = $siteurl.'pay/ok/'.TRADE_NO.'/';
+		}
 		$bizContent = [
 			'out_trade_no' => TRADE_NO,
 			'total_amount' => $order['realmoney'],
@@ -263,9 +267,12 @@ class alipaysl_plugin
 
 	//扫码支付
 	static public function qrcode(){
-		global $siteurl, $channel, $order, $ordername, $conf, $clientip;
+		global $siteurl, $channel, $order, $ordername, $conf, $clientip, $mdevice;
 		if(!in_array('3',$channel['apptype']) && in_array('2',$channel['apptype'])){
 			$code_url = $siteurl.'pay/submitwap/'.TRADE_NO.'/';
+			if(!empty($conf['localurl_alipay']) && !strpos($conf['localurl_alipay'],$_SERVER['HTTP_HOST'])){
+				$code_url = $conf['localurl_alipay'].'pay/submitwap/'.TRADE_NO.'/';
+			}
 		}elseif(!in_array('3',$channel['apptype']) && in_array('4',$channel['apptype'])){
 			$code_url = $siteurl.'pay/jspay/'.TRADE_NO.'/';
 			if(!empty($conf['localurl_alipay']) && !strpos($conf['localurl_alipay'],$_SERVER['HTTP_HOST'])){
@@ -273,33 +280,50 @@ class alipaysl_plugin
 			}
 		}elseif(!in_array('3',$channel['apptype']) && in_array('6',$channel['apptype'])){
 			$code_url = $siteurl.'pay/apppay/'.TRADE_NO.'/';
+			if(!empty($conf['localurl_alipay']) && !strpos($conf['localurl_alipay'],$_SERVER['HTTP_HOST'])){
+				$code_url = $conf['localurl_alipay'].'pay/apppay/'.TRADE_NO.'/';
+			}
 		}elseif(!in_array('3',$channel['apptype']) && in_array('7',$channel['apptype'])){
-			$code_url = $siteurl.'pay/jsapipay/'.TRADE_NO.'/';
+			$code_url = $siteurl.'pay/minipay/'.TRADE_NO.'/';
 		}elseif(!in_array('3',$channel['apptype']) && in_array('5',$channel['apptype'])){
 			$code_url = $siteurl.'pay/preauth/'.TRADE_NO.'/';
+			if(!empty($conf['localurl_alipay']) && !strpos($conf['localurl_alipay'],$_SERVER['HTTP_HOST'])){
+				$code_url = $conf['localurl_alipay'].'pay/preauth/'.TRADE_NO.'/';
+			}
 		}else{
-		
-		$alipay_config = require(PAY_ROOT.'inc/config.php');
-		$alipay_config['notify_url'] = $conf['localurl'].'pay/notify/'.TRADE_NO.'/';
-		$bizContent = [
-			'out_trade_no' => TRADE_NO,
-			'total_amount' => $order['realmoney'],
-			'subject' => $ordername
-		];
-		if(!in_array('3',$channel['apptype']) && in_array('8',$channel['apptype'])){
-			$bizContent['product_code'] = 'QR_CODE_OFFLINE';
-		}
-		$bizContent['business_params'] = ['mc_create_trade_ip' => $clientip];
-		try{
-			$aop = new \Alipay\AlipayTradeService($alipay_config);
-			$result = $aop->qrPay($bizContent);
-		}catch(Exception $e){
-			return ['type'=>'error','msg'=>'支付宝下单失败！'.$e->getMessage()];
-		}
-		$code_url = $result['qr_code'];
+
+			if($conf['alipay_qrpaylogin'] == 1){
+				if(checkalipay() || $mdevice=='alipay'){
+					[$user_type, $user_id] = alipay_oauth(require(PAY_ROOT.'inc/config.php'));
+					$blocks = checkBlockUser($user_id, TRADE_NO);
+					if($blocks) return $blocks;
+				}else{
+					$code_url = $siteurl.'pay/qrcode/'.TRADE_NO.'/';
+					return ['type'=>'qrcode','page'=>'alipay_qrcode','url'=>$code_url];
+				}
+			}
+
+			$alipay_config = require(PAY_ROOT.'inc/config.php');
+			$alipay_config['notify_url'] = $conf['localurl'].'pay/notify/'.TRADE_NO.'/';
+			$bizContent = [
+				'out_trade_no' => TRADE_NO,
+				'total_amount' => $order['realmoney'],
+				'subject' => $ordername
+			];
+			if(!in_array('3',$channel['apptype']) && in_array('8',$channel['apptype'])){
+				$bizContent['product_code'] = 'QR_CODE_OFFLINE';
+			}
+			$bizContent['business_params'] = ['mc_create_trade_ip' => $clientip];
+			try{
+				$aop = new \Alipay\AlipayTradeService($alipay_config);
+				$result = $aop->qrPay($bizContent);
+			}catch(Exception $e){
+				return ['type'=>'error','msg'=>'支付宝下单失败！'.$e->getMessage()];
+			}
+			$code_url = $result['qr_code'];
 
 		}
-		if(checkalipay() && $order['tid']==3){
+		if(checkalipay() || $mdevice=='alipay'){
 			return ['type'=>'jump','url'=>$code_url];
 		}else{
 			return ['type'=>'qrcode','page'=>'alipay_qrcode','url'=>$code_url];
@@ -313,7 +337,7 @@ class alipaysl_plugin
 		$alipay_config = require(PAY_ROOT.'inc/config.php');
 
 		if($conf['alipay_wappaylogin']==1 && checkalipay()){
-			[$user_type, $user_id] = self::oauth($alipay_config);
+			[$user_type, $user_id] = alipay_oauth($alipay_config);
 			$blocks = checkBlockUser($user_id, TRADE_NO);
 			if($blocks) return $blocks;
 		}
@@ -350,7 +374,7 @@ class alipaysl_plugin
 		$alipay_config = require(PAY_ROOT.'inc/config.php');
 
 		if($conf['alipay_wappaylogin']==1 && checkalipay()){
-			[$user_type, $user_id] = self::oauth($alipay_config);
+			[$user_type, $user_id] = alipay_oauth($alipay_config);
 			$blocks = checkBlockUser($user_id, TRADE_NO);
 			if($blocks) return $blocks;
 		}
@@ -389,7 +413,7 @@ class alipaysl_plugin
 			$user_id = $order['sub_openid'];
 			$user_type = is_numeric($user_id) && substr($user_id, 0, 4) == '2088' ? 'userid' : 'openid';
 		}else{
-			[$user_type, $user_id] = self::oauth($alipay_config);
+			[$user_type, $user_id] = alipay_oauth($alipay_config);
 		}
 		
 		$blocks = checkBlockUser($user_id, TRADE_NO);
@@ -430,12 +454,8 @@ class alipaysl_plugin
 	static public function jsapipay(){
 		global $siteurl, $channel, $order, $ordername, $conf, $clientip, $method;
 
-		if(!empty($order['sub_openid'])){
-			$user_id = $order['sub_openid'];
-			$user_type = is_numeric($user_id) && substr($user_id, 0, 4) == '2088' ? 'userid' : 'openid';
-		}else{
-			[$user_type, $user_id] = get_alipay_userid();
-		}
+		$user_id = $order['sub_openid'];
+		$user_type = is_numeric($user_id) && substr($user_id, 0, 4) == '2088' ? 'userid' : 'openid';
 		
 		$blocks = checkBlockUser($user_id, TRADE_NO);
 		if($blocks) return $blocks;
@@ -462,16 +482,62 @@ class alipaysl_plugin
 			return ['type'=>'error','msg'=>'支付宝下单失败！'.$e->getMessage()];
 		}
 		$alipay_trade_no = $result['trade_no'];
-		if($method == 'jsapi'){
-			return ['type'=>'jsapi','data'=>$alipay_trade_no];
+		return ['type'=>'jsapi','data'=>$alipay_trade_no];
+	}
+
+	//支付宝小程序支付
+	static public function alipaymini(){
+		global $siteurl, $channel, $order, $ordername, $conf, $clientip;
+		
+		$auth_code = isset($_GET['auth_code'])?trim($_GET['auth_code']):exit('{"code":-1,"msg":"auth_code不能为空"}');
+
+		$alipay_config = require(PAY_ROOT.'inc/config.php');
+		$alipay_config['notify_url'] = $conf['localurl'].'pay/notify/'.TRADE_NO.'/';
+
+		try{
+			[$app_id, $user_type, $user_id] = alipay_mini_oauth($auth_code, $alipay_config);
+		}catch(Exception $e){
+			exit(json_encode(['code'=>-1, 'msg'=>$e->getMessage()]));
 		}
+	
+		$blocks = checkBlockUser($user_id, TRADE_NO);
+		if($blocks)exit('{"code":-1,"msg":"'.$blocks['msg'].'"}');
+
+		$bizContent = [
+			'out_trade_no' => TRADE_NO,
+			'total_amount' => $order['realmoney'],
+			'subject' => $ordername,
+			'product_code' => 'JSAPI_PAY',
+			'op_app_id' => $app_id
+		];
+		if($user_type == 'openid'){
+			$bizContent['buyer_open_id'] = $user_id;
+		}else{
+			$bizContent['buyer_id'] = $user_id;
+		}
+		$bizContent['business_params'] = ['mc_create_trade_ip' => $clientip];
+		try{
+			$aop = new \Alipay\AlipayTradeService($alipay_config);
+			$result = $aop->jsPay($bizContent);
+			$alipay_trade_no = $result['trade_no'];
+		}catch(Exception $e){
+			exit(json_encode(['code'=>-1, 'msg'=>'支付宝下单失败！'.$e->getMessage()]));
+		}
+		exit(json_encode(['code'=>0, 'data'=>$alipay_trade_no]));
+	}
+
+	//H5跳转小程序支付
+	static public function minipay(){
+		global $siteurl, $channel, $conf;
+
+		$code_url = alipaymini_jump_scheme(TRADE_NO, $channel['appid']);
 
 		if($_GET['d']=='1'){
 			$redirect_url='data.backurl';
 		}else{
 			$redirect_url='\'/pay/ok/'.TRADE_NO.'/\'';
 		}
-		return ['type'=>'page','page'=>'alipay_jspay','data'=>['alipay_trade_no'=>$alipay_trade_no, 'redirect_url'=>$redirect_url]];
+		return ['type'=>'page','page'=>'alipay_h5','data'=>['code_url'=>$code_url, 'redirect_url'=>$redirect_url]];
 	}
 
 	//付款码支付
@@ -516,6 +582,7 @@ class alipaysl_plugin
 					}elseif($result['trade_status'] != 'WAIT_BUYER_PAY'){
 						return ['type'=>'error','msg'=>'支付宝支付失败！订单超时或用户取消支付'];
 					}
+					$retry++;
 				}
 				if($success){
 					if(!empty($result['buyer_user_id'])){
@@ -683,6 +750,24 @@ class alipaysl_plugin
 		return  ['code'=>0, 'trade_no'=>$result['trade_no'], 'refund_fee'=>$result['refund_fee'], 'refund_time'=>$result['gmt_refund_pay'], 'buyer'=>$result['buyer_user_id']];
 	}
 
+	//关闭订单
+	static public function close($order){
+		global $channel;
+		if(empty($order))exit();
+
+		$alipay_config = require(PAY_ROOT.'inc/config.php');
+		$bizContent = [
+			'out_trade_no' => $order['trade_no'],
+		];
+		try{
+			$aop = new \Alipay\AlipayTradeService($alipay_config);
+			$aop->close($bizContent);
+			return  ['code'=>0];
+		}catch(Exception $e){
+			return ['code'=>-1, 'msg'=>$e->getMessage()];
+		}
+	}
+
 	//支付宝应用网关
 	static public function appgw(){
 		global $channel,$DB;
@@ -716,27 +801,5 @@ class alipaysl_plugin
 		}else{
 			return ['type'=>'html','data'=>'check sign fail'];
 		}
-	}
-
-	static private function oauth($alipay_config){
-		$redirect_uri = (is_https() ? 'https://' : 'http://').$_SERVER['HTTP_HOST'].$_SERVER['REQUEST_URI'];
-		try{
-			$oauth = new \Alipay\AlipayOauthService($alipay_config);
-			if(isset($_GET['auth_code'])){
-				$result = $oauth->getToken($_GET['auth_code']);
-				if(!empty($result['user_id'])){
-					$openid = $result['user_id'];
-					$openid_type = 'userid';
-				}else{
-					$openid = $result['open_id'];
-					$openid_type = 'openid';
-				}
-			}else{
-				$oauth->oauth($redirect_uri);
-			}
-		}catch(Exception $e){
-			throw new Exception('支付宝快捷登录失败！'.$e->getMessage());
-		}
-		return [$openid_type, $openid];
 	}
 }

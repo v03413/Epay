@@ -148,6 +148,15 @@ case 'getChannelsByPlugin':
 	}
 	else exit('{"code":-1,"msg":"没有找到支持该支付插件的通道"}');
 break;
+case 'getSubChannels':
+	$channel = intval($_GET['channel']);
+	$uid = intval($_GET['uid']);
+	$sql = " channel='$channel'";
+	if($uid > 0) $sql .= " AND uid='$uid'";
+	$list=$DB->getAll("SELECT id,name,channel,apply_id FROM pre_subchannel WHERE{$sql} ORDER BY id ASC");
+	$result = ['code'=>0,'msg'=>'succ','data'=>$list];
+	exit(json_encode($result));
+break;
 case 'setChannel':
 	$id=intval($_GET['id']);
 	$status=intval($_GET['status']);
@@ -156,6 +165,9 @@ case 'setChannel':
 		exit('{"code":-1,"msg":"当前支付通道不存在！"}');
 	if($status==1 && empty($row['config'])){
 		exit('{"code":-1,"msg":"请先配置好密钥后再开启"}');
+	}
+	if($status==1 && $conf['admin_pwd']=='123456'){
+		exit('{"code":-1,"msg":"请先修改默认管理员密码后再开启支付通道"}');
 	}
 	$sql = "UPDATE pre_channel SET status='$status' WHERE id='$id'";
 	if($DB->exec($sql))exit('{"code":0,"msg":"修改支付通道成功！"}');
@@ -190,6 +202,8 @@ case 'saveChannel':
 		$mode=intval($_POST['mode']);
 		$paymin=trim($_POST['paymin']);
 		$paymax=trim($_POST['paymax']);
+		$daymaxorder=intval($_POST['daymaxorder']);
+		if(empty($rate)) $rate = 100;
 		if(!preg_match('/^[0-9.]+$/',$rate)){
 			exit('{"code":-1,"msg":"分成比例不符合规则"}');
 		}
@@ -205,7 +219,7 @@ case 'saveChannel':
 		$row=$DB->getRow("SELECT * FROM pre_channel WHERE name='$name' LIMIT 1");
 		if($row)
 			exit('{"code":-1,"msg":"支付通道名称重复"}');
-		$data = ['name'=>$name, 'rate'=>$rate, 'costrate'=>$costrate, 'mode'=>$mode, 'type'=>$type, 'plugin'=>$plugin, 'daytop'=>$daytop, 'paymin'=>$paymin, 'paymax'=>$paymax];
+		$data = ['name'=>$name, 'rate'=>$rate, 'costrate'=>$costrate, 'mode'=>$mode, 'type'=>$type, 'plugin'=>$plugin, 'daytop'=>$daytop, 'paymin'=>$paymin, 'paymax'=>$paymax, 'daymaxorder'=>$daymaxorder];
 		if($DB->insert('channel', $data))exit('{"code":0,"msg":"新增支付通道成功！"}');
 		else exit('{"code":-1,"msg":"新增支付通道失败['.$DB->error().']"}');
 	}elseif($_POST['action'] == 'copy'){
@@ -221,6 +235,7 @@ case 'saveChannel':
 		$mode=intval($_POST['mode']);
 		$paymin=trim($_POST['paymin']);
 		$paymax=trim($_POST['paymax']);
+		$daymaxorder=intval($_POST['daymaxorder']);
 		if(!preg_match('/^[0-9.]+$/',$rate)){
 			exit('{"code":-1,"msg":"分成比例不符合规则"}');
 		}
@@ -236,7 +251,7 @@ case 'saveChannel':
 		$nrow=$DB->getRow("SELECT * FROM pre_channel WHERE name='$name' LIMIT 1");
 		if($nrow)
 			exit('{"code":-1,"msg":"支付通道名称重复"}');
-		$data = ['name'=>$name, 'rate'=>$rate, 'costrate'=>$costrate, 'mode'=>$mode, 'type'=>$type, 'plugin'=>$plugin, 'daytop'=>$daytop, 'paymin'=>$paymin, 'paymax'=>$paymax, 'config'=>$row['config'], 'apptype'=>$row['apptype'], 'appwxmp'=>$row['appwxmp'], 'appwxa'=>$row['appwxa']];
+		$data = ['name'=>$name, 'rate'=>$rate, 'costrate'=>$costrate, 'mode'=>$mode, 'type'=>$type, 'plugin'=>$plugin, 'daytop'=>$daytop, 'paymin'=>$paymin, 'paymax'=>$paymax, 'daymaxorder'=>$daymaxorder, 'config'=>$row['config'], 'apptype'=>$row['apptype'], 'appwxmp'=>$row['appwxmp'], 'appwxa'=>$row['appwxa']];
 		if($DB->insert('channel', $data))exit('{"code":0,"msg":"复制支付通道成功！"}');
 		else exit('{"code":-1,"msg":"复制支付通道失败['.$DB->error().']"}');
 	}elseif($_POST['action'] == 'edit'){
@@ -252,6 +267,7 @@ case 'saveChannel':
 		$mode=intval($_POST['mode']);
 		$paymin=trim($_POST['paymin']);
 		$paymax=trim($_POST['paymax']);
+		$daymaxorder=intval($_POST['daymaxorder']);
 		if(!preg_match('/^[0-9.]+$/',$rate)){
 			exit('{"code":-1,"msg":"分成比例不符合规则"}');
 		}
@@ -267,9 +283,9 @@ case 'saveChannel':
 		$nrow=$DB->getRow("SELECT * FROM pre_channel WHERE name='$name' AND id<>$id LIMIT 1");
 		if($nrow)
 			exit('{"code":-1,"msg":"支付通道名称重复"}');
-		$data = ['name'=>$name, 'rate'=>$rate, 'costrate'=>$costrate, 'mode'=>$mode, 'type'=>$type, 'plugin'=>$plugin, 'daytop'=>$daytop, 'paymin'=>$paymin, 'paymax'=>$paymax];
+		$data = ['name'=>$name, 'rate'=>$rate, 'costrate'=>$costrate, 'mode'=>$mode, 'type'=>$type, 'plugin'=>$plugin, 'daytop'=>$daytop, 'paymin'=>$paymin, 'paymax'=>$paymax, 'daymaxorder'=>$daymaxorder];
 		if($DB->update('channel', $data, ['id'=>$id])!==false){
-			if($row['daystatus']==1 && ($daytop==0 || $daytop>$row['daytop'])){
+			if($row['daystatus']==1 && ($daytop==0 || $daytop>$row['daytop'] || $daymaxorder==0)){
 				$DB->exec("UPDATE pre_channel SET daystatus=0 WHERE id='$id'");
 			}
 			exit('{"code":0,"msg":"修改支付通道成功！"}');
@@ -425,7 +441,9 @@ case 'rollInfo':
 	$row=$DB->getRow("select * from pre_roll where id='$id' limit 1");
 	if(!$row)
 		exit('{"code":-1,"msg":"当前轮询组不存在！"}');
-	$list=$DB->getAll("select id,name from pre_channel where type='{$row['type']}' and status=1 ORDER BY id ASC");
+	$sql = "";
+	if($row['kind'] < 2) $sql = " AND status=1 ";
+	$list=$DB->getAll("select id,name from pre_channel where type='{$row['type']}'{$sql} ORDER BY id ASC");
 	if(!$list)exit('{"code":-1,"msg":"没有找到支持该支付方式的通道"}');
 	if(!empty($row['info'])){
 		$arr = explode(',',$row['info']);
@@ -437,7 +455,7 @@ case 'rollInfo':
 	}else{
 		$info = null;
 	}
-	$result=array("code"=>0,"msg"=>"succ","channels"=>$list,"info"=>$info);
+	$result=array("code"=>0,"msg"=>"succ","channels"=>$list,"info"=>$info,"kind"=>$row['kind']);
 	exit(json_encode($result));
 break;
 case 'saveRollInfo':
@@ -463,15 +481,23 @@ break;
 case 'getChannelMoney': //统计支付通道金额
 	$type=intval($_GET['type']);
 	$channel=intval($_GET['channel']);
-	$today=$type==1 ? date("Y-m-d", strtotime("-1 day")) : date("Y-m-d");
-	$money=$DB->getColumn("SELECT SUM(realmoney) FROM pre_order WHERE date='$today' AND channel='$channel' AND status>0");
-	exit('{"code":0,"msg":"succ","money":"'.round($money,2).'"}');
+	if($type == 2 || $type == 3){
+		$today=$type==3 ? date("Y-m-d", strtotime("-1 day")) : date("Y-m-d");
+		$orders=$DB->getColumn("SELECT COUNT(*) FROM pre_order WHERE date='$today' AND channel='$channel' AND status>0");
+		exit('{"code":0,"msg":"succ","money":"'.$orders.'"}');
+	}else{
+		$today=$type==1 ? date("Y-m-d", strtotime("-1 day")) : date("Y-m-d");
+		$money=$DB->getColumn("SELECT SUM(realmoney) FROM pre_order WHERE date='$today' AND channel='$channel' AND status>0");
+		exit('{"code":0,"msg":"succ","money":"'.round($money,2).'"}');
+	}
 break;
 case 'getSubChannelMoney': //统计子通道金额
 	$type=intval($_GET['type']);
-	$channel=intval($_GET['channel']);
+	$channel=trim($_GET['channel']);
 	$today=$type==1 ? date("Y-m-d", strtotime("-1 day")) : date("Y-m-d");
-	$money=$DB->getColumn("SELECT SUM(realmoney) FROM pre_order WHERE date='$today' AND subchannel='$channel' AND status>0");
+	$channel = explode('|', $channel);
+	$channel = array_map('intval', $channel);
+	$money=$DB->getColumn("SELECT SUM(realmoney) FROM pre_order WHERE date='$today' AND subchannel IN (".implode(",", $channel).") AND status>0");
 	exit('{"code":0,"msg":"succ","money":"'.round($money,2).'"}');
 break;
 case 'getTypeMoney': //统计支付方式金额
@@ -496,25 +522,21 @@ case 'getChannelRate':
 break;
 case 'getSuccessRate':
 	$channel = intval($_GET['channel']);
-	$thtime = date("Y-m-d") . ' 00:00:00';
+	$thtime = date("Y-m-d");
 	$orderrow=$DB->getRow("SELECT COUNT(*) allnum,COUNT(IF(status>0, 1, NULL)) sucnum FROM pre_order WHERE addtime>='$thtime' AND channel='$channel'");
-	$success_rate = 100;
-	if($orderrow){
-		if($orderrow['allnum'] > 0){
-			$success_rate = round($orderrow['sucnum']/$orderrow['allnum']*100,2);
-		}
-	}
+	$success_rate = $orderrow && $orderrow['allnum'] > 0 ? round($orderrow['sucnum']/$orderrow['allnum']*100,2) : 100;
 	exit('{"code":0,"msg":"succ","data":"' . $success_rate . '"}');
 break;
 
 case 'testpay':
 	$channel=intval($_POST['channel']);
 	$subchannel=intval($_POST['subchannel']);
+	$param=!empty($_POST['param'])?trim($_POST['param']):null;
 	$row=$DB->getRow("select * from pre_channel where id='$channel' limit 1");
 	if(!$row)
 		exit('{"code":-1,"msg":"当前支付通道不存在！"}');
 	if($subchannel > 0){
-		if(!$DB->getRow("select * from pre_subchannel where id='$subchannel' limit 1")) exit('{"code":-1,"msg":"当前子不存在！"}');
+		if(!$DB->getRow("select * from pre_subchannel where id='$subchannel' limit 1")) exit('{"code":-1,"msg":"当前子通道不存在！"}');
 	}
 	if(empty($row['config']))exit('{"code":-1,"msg":"请先配置好密钥"}');
 	if(!$conf['test_pay_uid'])exit('{"code":-1,"msg":"请先配置测试支付收款商户ID"}');
@@ -526,7 +548,7 @@ case 'testpay':
 	$trade_no=date("YmdHis").rand(11111,99999);
 	$return_url=$siteurl.'user/test.php?ok=1&trade_no='.$trade_no;
 	$domain=getdomain($return_url);
-	if(!$DB->exec("INSERT INTO `pre_order` (`trade_no`,`out_trade_no`,`uid`,`tid`,`addtime`,`name`,`money`,`type`,`channel`,`subchannel`,`realmoney`,`getmoney`,`notify_url`,`return_url`,`domain`,`ip`,`status`) VALUES (:trade_no, :out_trade_no, :uid, 3, NOW(), :name, :money, :type, :channel, :subchannel, :realmoney, :getmoney, :notify_url, :return_url, :domain, :clientip, 0)", [':trade_no'=>$trade_no, ':out_trade_no'=>$trade_no, ':uid'=>$conf['test_pay_uid'], ':name'=>$name, ':money'=>$money, ':type'=>$row['type'], ':channel'=>$channel, ':subchannel'=>$subchannel, ':realmoney'=>$money, ':getmoney'=>$money, ':notify_url'=>$return_url, ':return_url'=>$return_url, ':domain'=>$domain, ':clientip'=>$clientip]))exit('{"code":-1,"msg":"创建订单失败，请返回重试！"}');
+	if(!$DB->exec("INSERT INTO `pre_order` (`trade_no`,`out_trade_no`,`uid`,`tid`,`addtime`,`name`,`money`,`type`,`channel`,`subchannel`,`realmoney`,`getmoney`,`notify_url`,`return_url`,`domain`,`ip`,`param`,`status`) VALUES (:trade_no, :out_trade_no, :uid, 3, NOW(), :name, :money, :type, :channel, :subchannel, :realmoney, :getmoney, :notify_url, :return_url, :domain, :clientip, :param, 0)", [':trade_no'=>$trade_no, ':out_trade_no'=>$trade_no, ':uid'=>$conf['test_pay_uid'], ':name'=>$name, ':money'=>$money, ':type'=>$row['type'], ':channel'=>$channel, ':subchannel'=>$subchannel, ':realmoney'=>$money, ':getmoney'=>$money, ':notify_url'=>$return_url, ':return_url'=>$return_url, ':domain'=>$domain, ':clientip'=>$clientip, ':param'=>$param]))exit('{"code":-1,"msg":"创建订单失败，请返回重试！"}');
 	$result = ['code'=>0, 'msg'=>'succ', 'url'=>'./testsubmit.php?trade_no='.$trade_no];
 	exit(json_encode($result));
 break;

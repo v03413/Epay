@@ -1,29 +1,32 @@
 <?php
 
+/**
+ * https://mer.jd.com/open/?agg_recpt
+ */
 class PayApp
 {
     const GATEWAY = 'https://openapi.duolabao.com';
-    private $config = [];
+    private $accessKey;
+	private $secretKey;
 
-    function __construct($config)
+    function __construct($accessKey, $secretKey)
 	{
-		$this->config = $config;
-		if (!$this->config['customerNum'] || !$this->config['shopNum'] || !$this->config['secretKey'] || !$this->config['accessKey']) {
-			throw new Exception('参数不完整！');
-		}
+		$this->accessKey = $accessKey;
+		$this->secretKey = $secretKey;
 	}
 
-    public function submit($path, $param){
-        $json = json_encode($param);
+    public function submit($path, $param = null){
+        $body = $param ? json_encode($param, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) : '';
         $time = time();
-        $token = $this->get_token($path, $json, $time);
+        $token = $this->get_token($time, $path, $body);
         $headers = [
             'Content-Type: application/json',
-            'accessKey: ' . $this->config['accessKey'],
+            'accessKey: ' . $this->accessKey,
             'timestamp: ' . $time,
             'token: ' . $token
         ];
-        $response = $this->Curl($path, $headers, $json);
+		$path = implode('/', array_map('urlencode', explode('/', $path)));
+        $response = $this->curl($path, $headers, $body);
         $result = json_decode($response, true);
         if($result['result'] == 'success'){
             return $result['data'];
@@ -34,29 +37,49 @@ class PayApp
         }
     }
 
-    public function verifyNotify()
+	public function submitNew($path, $param = null){
+        $body = $param ? json_encode($param, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) : '';
+        $time = time();
+        $token = $this->get_token($time, $path, $body);
+        $headers = [
+            'Content-Type: application/json',
+            'accessKey: ' . $this->accessKey,
+            'timestamp: ' . $time,
+            'token: ' . $token
+        ];
+		$path = implode('/', array_map('urlencode', explode('/', $path)));
+        $response = $this->curl($path, $headers, $body);
+        $result = json_decode($response, true);
+        if(isset($result['success']) && $result['success']===true || isset($result['result']) && $result['result']===true){
+            return $result;
+        }elseif(isset($result['errorCode'])){
+            throw new Exception('['.$result['errorCode'].']'.$result['errorMsg']);
+        }elseif(isset($result['msg'])){
+            throw new Exception('['.$result['code'].']'.$result['msg']);
+        }elseif(isset($result['message'])){
+            throw new Exception('['.$result['code'].']'.$result['message']);
+        }else{
+            throw new Exception('接口请求失败');
+        }
+    }
+
+    public function verifyNotify($body = null)
 	{
-		$headers = array(); 
-		foreach ($_SERVER as $key => $value) { 
-			if ('HTTP_' == substr($key, 0, 5)) { 
-				$headers[str_replace('_', '-', substr($key, 5))] = $value; 
-			}
+		$timestamp = $_SERVER['HTTP_TIMESTAMP'];
+		$token = $this->get_token($timestamp, null, $body);
+		if ($token === $_SERVER['HTTP_TOKEN']) {
+			return true;
 		}
-		$signString = "secretKey={$this->config['secretKey']}&timestamp={$headers['TIMESTAMP']}";
-		$token = strtoupper(sha1($signString));
-		if ($token !== $headers['TOKEN']) {
-			return false;
-		}
-		return true;
+		return false;
 	}
 
-    private function get_token($path, $body, $time){
+    private function get_token($time, $path, $body){
         $sign_data = [
-			'secretKey' => $this->config['secretKey'],
+			'secretKey' => $this->secretKey,
 			'timestamp' => $time,
-			'path'      => $path,
-			'body'      => $body,
 		];
+		if($path) $sign_data['path'] = $path;
+		if($body) $sign_data['body'] = $body;
 		$o = '';
 		foreach ($sign_data as $k => $v) {
 			 $o .= "{$k}={$v}&";
@@ -66,7 +89,7 @@ class PayApp
         return $token;
     }
 
-    private function Curl($path, $headers, $post = null)
+    private function curl($path, $headers, $post = null)
 	{
 		$url = self::GATEWAY . $path;
 		$ch = curl_init();

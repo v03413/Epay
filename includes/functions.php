@@ -6,7 +6,6 @@ function curl_get($url)
 	if($conf['proxy'] == 1){
 		$proxy_server = $conf['proxy_server'];
 		$proxy_port = intval($conf['proxy_port']);
-		$proxy_userpwd = $conf['proxy_user'].':'.$conf['proxy_pwd'];
 		if($conf['proxy_type'] == 'https'){
 			$proxy_type = CURLPROXY_HTTPS;
 		}elseif($conf['proxy_type'] == 'sock4'){
@@ -19,7 +18,10 @@ function curl_get($url)
 		curl_setopt($ch, CURLOPT_PROXYAUTH, CURLAUTH_BASIC);
 		curl_setopt($ch, CURLOPT_PROXY, $proxy_server);
 		curl_setopt($ch, CURLOPT_PROXYPORT, $proxy_port);
-		curl_setopt($ch, CURLOPT_PROXYUSERPWD, $proxy_userpwd);
+		if(!empty($conf['proxy_user']) && !empty($conf['proxy_pwd'])){
+			$proxy_userpwd = $conf['proxy_user'].':'.$conf['proxy_pwd'];
+			curl_setopt($ch, CURLOPT_PROXYUSERPWD, $proxy_userpwd);
+		}
 		curl_setopt($ch, CURLOPT_PROXYTYPE, $proxy_type);
 	}
 	$httpheader[] = "Accept: */*";
@@ -81,22 +83,24 @@ function get_curl($url, $post=0, $referer=0, $cookie=0, $header=0, $ua=0, $nobao
 	return $ret;
 }
 function real_ip($type=0){
-$ip = $_SERVER['REMOTE_ADDR'];
-if($type<=0 && isset($_SERVER['HTTP_X_FORWARDED_FOR']) && preg_match_all('#\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}#s', $_SERVER['HTTP_X_FORWARDED_FOR'], $matches)) {
-	foreach ($matches[0] AS $xip) {
-		if (filter_var($xip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 | FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
-			$ip = $xip;
-			break;
+	$ip = $_SERVER['REMOTE_ADDR'];
+	if($type<=0 && isset($_SERVER['HTTP_X_FORWARDED_FOR']) && !empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
+		$ips = explode(',', $_SERVER['HTTP_X_FORWARDED_FOR']);
+		foreach ($ips as $xip) {
+			$xip = trim($xip);
+			if (filter_var($xip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+				$ip = $xip;
+				break;
+			}
 		}
+	} elseif ($type<=0 && isset($_SERVER['HTTP_CLIENT_IP']) && filter_var($_SERVER['HTTP_CLIENT_IP'], FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+		$ip = $_SERVER['HTTP_CLIENT_IP'];
+	} elseif ($type<=1 && isset($_SERVER['HTTP_CF_CONNECTING_IP']) && filter_var($_SERVER['HTTP_CF_CONNECTING_IP'], FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+		$ip = $_SERVER['HTTP_CF_CONNECTING_IP'];
+	} elseif ($type<=1 && isset($_SERVER['HTTP_X_REAL_IP']) && filter_var($_SERVER['HTTP_X_REAL_IP'], FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+		$ip = $_SERVER['HTTP_X_REAL_IP'];
 	}
-} elseif ($type<=0 && isset($_SERVER['HTTP_CLIENT_IP']) && filter_var($_SERVER['HTTP_CLIENT_IP'], FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 | FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
-	$ip = $_SERVER['HTTP_CLIENT_IP'];
-} elseif ($type<=1 && isset($_SERVER['HTTP_CF_CONNECTING_IP']) && filter_var($_SERVER['HTTP_CF_CONNECTING_IP'], FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 | FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
-	$ip = $_SERVER['HTTP_CF_CONNECTING_IP'];
-} elseif ($type<=1 && isset($_SERVER['HTTP_X_REAL_IP']) && filter_var($_SERVER['HTTP_X_REAL_IP'], FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 | FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
-	$ip = $_SERVER['HTTP_X_REAL_IP'];
-}
-return $ip;
+	return $ip;
 }
 function get_ip_city($ip)
 {
@@ -151,20 +155,24 @@ function send_mail($to, $sub, $msg) {
 		}
 	}
 }
-function send_sms($phone, $code, $scope='reg'){
+function send_sms($phone, $code, $scene='reg'){
 	global $conf;
-	if($scope == 'reg'){
-		$moban = $conf['sms_tpl_reg'];
-	}elseif($scope == 'login'){
-		$moban = $conf['sms_tpl_login'];
-	}elseif($scope == 'find'){
-		$moban = $conf['sms_tpl_find'];
-	}elseif($scope == 'edit'){
-		$moban = $conf['sms_tpl_edit'];
+	if($scene == 'reg'){
+		$tpl_code = $conf['sms_tpl_reg'];
+	}elseif($scene == 'login'){
+		$tpl_code = $conf['sms_tpl_login'];
+	}elseif($scene == 'find'){
+		$tpl_code = $conf['sms_tpl_find'];
+	}elseif($scene == 'edit'){
+		$tpl_code = $conf['sms_tpl_edit'];
 	}
+	return send_sms_common($phone, $tpl_code, ['code'=>$code]);
+}
+function send_sms_common($phone, $tpl_code, $tpl_param){
+	global $conf;
 	if($conf['sms_api']==1){
 		$sms = new \lib\sms\Qcloud($conf['sms_appid'], $conf['sms_appkey']);
-		$arr = $sms->send($phone, $moban, [$code], $conf['sms_sign']);
+		$arr = $sms->send($phone, $tpl_code, array_values($tpl_param), $conf['sms_sign']);
 		if(isset($arr['result']) && $arr['result']==0){
 			return true;
 		}else{
@@ -172,16 +180,15 @@ function send_sms($phone, $code, $scope='reg'){
 		}
 	}elseif($conf['sms_api']==2){
 		$sms = new \lib\sms\Aliyun($conf['sms_appid'], $conf['sms_appkey']);
-		$arr = $sms->send($phone, $code, $moban, $conf['sms_sign'], $conf['sitename']);
+		$arr = $sms->send($phone, $tpl_param, $tpl_code, $conf['sms_sign'], $conf['sitename']);
 		if(isset($arr['Code']) && $arr['Code']=='OK'){
 			return true;
 		}else{
 			return $arr['Message'];
 		}
 	}elseif($conf['sms_api']==3){
-		$app=$conf['sitename'];
 		$url = 'https://api.topthink.com/sms/send';
-		$param = ['appCode'=>$conf['sms_appkey'], 'signId'=>$conf['sms_sign'], 'templateId'=>$moban, 'phone'=>$phone, 'params'=>json_encode(['code'=>$code])];
+		$param = ['appCode'=>$conf['sms_appkey'], 'signId'=>$conf['sms_sign'], 'templateId'=>$tpl_code, 'phone'=>$phone, 'params'=>json_encode($tpl_param)];
 		$data=get_curl($url, http_build_query($param));
 		$arr=json_decode($data,true);
 		if(isset($arr['code']) && $arr['code']==0){
@@ -191,11 +198,11 @@ function send_sms($phone, $code, $scope='reg'){
 		}
 	}elseif($conf['sms_api']==4){
 		$sms = new \lib\sms\SmsBao($conf['sms_appid'], $conf['sms_appkey']);
-		return $sms->send($phone, $code, $moban, $conf['sms_sign']);
+		return $sms->send($phone, $tpl_param, $tpl_code, $conf['sms_sign']);
 	}else{
-		$app=$conf['sitename'];
 		$url = 'http://sms.php.gs/sms/send/yzm';
-		$param = ['appkey'=>$conf['sms_appkey'], 'phone'=>$phone, 'moban'=>$moban, 'code'=>$code, 'app'=>$app];
+		$param = ['appkey'=>$conf['sms_appkey'], 'phone'=>$phone, 'moban'=>$tpl_code];
+		$param = array_merge($param, $tpl_param);
 		$data=get_curl($url, http_build_query($param));
 		$arr=json_decode($data,true);
 		if($arr['status']=='200'){
@@ -255,6 +262,18 @@ function checkmobbileqq(){
 		return true;
 	else
 		return false;
+}
+function checkunionpay(){
+	if(strpos($_SERVER['HTTP_USER_AGENT'], 'UnionPay/') !== false)
+		return true;
+	else
+		return false;
+}
+function get_unionpay_ua(){
+	if (preg_match('/UnionPay\/([0-9\.]+) ([a-zA-Z0-9]+)/', $_SERVER['HTTP_USER_AGENT'], $matches)) {
+		return $matches[0];
+	}
+	return 'UnionPay/1.0 CloudPay';
 }
 function authcode($string, $operation = 'DECODE', $key = '', $expiry = 0) {
 	$ckey_length = 4;
@@ -411,6 +430,11 @@ function getSid() {
 function getMd5Pwd($pwd, $salt=null) {
     return md5(md5($pwd) . md5('1277180438'.$salt));
 }
+function getMillisecond()
+{
+	list($s1, $s2) = explode(' ', microtime());
+	return sprintf('%.0f', (floatval($s1) + floatval($s2)) * 1000);
+}
 
 /**
  * 取中间文本
@@ -460,7 +484,8 @@ function creat_callback($data){
 	$type=$DB->getColumn("SELECT name FROM pre_type WHERE id='{$data['type']}' LIMIT 1");
 	if($data['version'] == 1){
 		$array=array('pid'=>$data['uid'],'trade_no'=>$data['trade_no'],'out_trade_no'=>$data['out_trade_no'],'type'=>$type,'name'=>$data['name'],'money'=>(float)$data['money'],'trade_status'=>'TRADE_SUCCESS');
-		if(!empty($data['api_trade_no']))$array['api_trade_no']=$data['api_trade_no'];
+		if(!empty($data['bill_trade_no']))$array['api_trade_no']=$data['bill_trade_no'];
+		elseif(!empty($data['api_trade_no']))$array['api_trade_no']=$data['api_trade_no'];
 		if(!empty($data['buyer']))$array['buyer']=$data['buyer'];
 		if(!empty($data['param']))$array['param']=$data['param'];
 		if($conf['notifyordername']==1)$array['name']='product';
@@ -530,21 +555,27 @@ function checkBlockUser($openid, $trade_no){
 	if($conf['pay_userlimit'] > 0){
 		$usercount = $DB->getColumn("select count(*) from pre_order where `buyer`=:buyer and `date`='".date('Y-m-d')."' and status>0", [':buyer'=>$openid]);
 		if($usercount >= $conf['pay_userlimit']){
-			sysmsg('你今天已无法再发起支付，请明天再试');
+			return ['type'=>'error','msg'=>'你今天已无法再发起支付，请明天再试'];
+		}
+	}
+	if($conf['pay_daymoney'] > 0){
+		$daymoney = $DB->getColumn("select sum(realmoney) from pre_order where `buyer`=:buyer and `date`='".date('Y-m-d')."' and status>0", [':buyer'=>$openid]);
+		if($daymoney >= $conf['pay_daymoney']){
+			return ['type'=>'error','msg'=>'你今天已累积支付金额超过'.$conf['pay_daymoney'].'元，请明天再试'];
 		}
 	}
 	return false;
 }
 
-function processReturn($order, $api_trade_no=null, $buyer=null){
-	\lib\Payment::processOrder(false, $order, $api_trade_no, $buyer);
+function processReturn($order, $api_trade_no=null, $buyer=null, $bill_trade_no = null, $bill_mch_trade_no = null, $end_time = null){
+	\lib\Payment::processOrder(false, $order, $api_trade_no, $buyer, $bill_trade_no, $bill_mch_trade_no, $end_time);
 }
 
-function processNotify($order, $api_trade_no=null, $buyer=null){
-	\lib\Payment::processOrder(true, $order, $api_trade_no, $buyer);
+function processNotify($order, $api_trade_no=null, $buyer=null, $bill_trade_no = null, $bill_mch_trade_no = null, $end_time = null){
+	\lib\Payment::processOrder(true, $order, $api_trade_no, $buyer, $bill_trade_no, $bill_mch_trade_no, $end_time);
 }
 
-function processOrder($srow,$notify=true){
+function processOrder(&$srow,$notify=true){
 	global $DB,$CACHE,$conf,$channel;
 	$addmoney = $srow['getmoney'];
 	$reducemoney = round($srow['realmoney']-$srow['getmoney'], 2);
@@ -581,7 +612,8 @@ function processOrder($srow,$notify=true){
 			}
 		}
 	}else if($srow['tid']==2){ //充值余额
-		changeUserMoney($srow['uid'], $addmoney, true, '余额充值', $srow['trade_no']);
+		$param = json_decode($srow['param'], true);
+		changeUserMoney($param['uid'], $addmoney, true, '余额充值', $srow['trade_no']);
 	}else if($srow['tid']==3){ //聚合收款码
 		if($channel['mode']==1){
 			if($reducemoney>0)
@@ -589,15 +621,54 @@ function processOrder($srow,$notify=true){
 		}else{
 			changeUserMoney($srow['uid'], $addmoney, true, '在线收款', $srow['trade_no']);
 		}
+		if($conf['black_payact'] == 2){
+			$black = $DB->find('blacklist', '*', ['type'=>0, 'content'=>$srow['buyer']], null, 1);
+			if($black){
+				$srow['black'] = true;
+				$params = ['trade_no'=>$srow['trade_no'], 'money'=>$srow['realmoney'], 'key'=>md5($srow['trade_no'].SYS_KEY.$srow['trade_no'])];
+				get_curl($conf['localurl'].'api.php?act=refundapi', http_build_query($params));
+				return;
+			}
+		}
 	}else if($srow['tid']==4){ //购买用户组
 		$param = json_decode($srow['param'], true);
-		changeUserGroup($srow['uid'], $param['gid'], $param['endtime']);
+		changeUserGroup($param['uid'], $param['gid'], $param['endtime']);
+
+		$upid = $DB->findColumn('user', 'upid', ['uid'=>$param['uid']]);
+		if($upid > 0){
+			$upgid = $DB->findColumn('user', 'gid', ['uid'=>$upid]);
+			$groupconfig = getGroupConfig($upgid);
+			$conf_n = array_merge($conf, $groupconfig);
+			if($conf_n['invite_open'] == 1 && $conf_n['invite_groupbuy_rate'] > 0){
+				$invite_money = round($srow['money'] * $conf_n['invite_groupbuy_rate'] / 100, 2);
+				if($invite_money > 0){
+					changeUserMoney($upid, $invite_money, true, '邀请购买会员');
+				}
+			}
+		}
+	}else if($srow['tid']==5){ //充值保证金
+		$param = json_decode($srow['param'], true);
+		$userrow = $DB->find('user', 'deposit', ['uid'=>$param['uid']]);
+		$deposit = $userrow['deposit'] > 0 ? round($userrow['deposit'] + $srow['money'], 2) : $srow['money'];
+		$DB->exec("UPDATE pre_user SET deposit=:deposit WHERE uid=:uid", [':deposit'=>$deposit, ':uid'=>$param['uid']]);
 	}else{
 		if($channel['mode']==1){
 			if($reducemoney>0)
 				changeUserMoney($srow['uid'], $reducemoney, false, '订单服务费', $srow['trade_no']);
 		}else{
 			changeUserMoney($srow['uid'], $addmoney, true, '订单收入', $srow['trade_no']);
+		}
+		if($conf['black_payact'] > 0){
+			$black = $DB->find('blacklist', '*', ['type'=>0, 'content'=>$srow['buyer']], null, 1);
+			if($black){
+				$srow['black'] = true;
+				$DB->exec("UPDATE pre_order SET notify=-1 WHERE trade_no='{$srow['trade_no']}'");
+				if($conf['black_payact'] == 2){
+					$params = ['trade_no'=>$srow['trade_no'], 'money'=>$srow['realmoney'], 'key'=>md5($srow['trade_no'].SYS_KEY.$srow['trade_no'])];
+            		get_curl($conf['localurl'].'api.php?act=refundapi', http_build_query($params));
+				}
+				return;
+			}
 		}
 		$url=creat_callback($srow);
 		if(do_notify($url['notify'])){
@@ -612,16 +683,26 @@ function processOrder($srow,$notify=true){
 		\lib\MsgNotice::send('order', $srow['uid'], ['trade_no'=>$srow['trade_no'], 'out_trade_no'=>$srow['out_trade_no'], 'name'=>$srow['name'], 'money'=>$srow['money'], 'type'=>$srow['typeshowname'], 'time'=>date('Y-m-d H:i:s')]);
 
 		//邀请返现
-		$upid = $DB->findColumn('user', 'upid', ['uid'=>$srow['uid']]);
-		if($upid > 0){
-			$upgid = $DB->findColumn('user', 'gid', ['uid'=>$upid]);
-			$groupconfig = getGroupConfig($upgid);
-			$conf = array_merge($conf, $groupconfig);
-			if($conf['invite_open'] == 1 && !empty($conf['invite_rate'])){
-				$invite_money = round($srow['money'] * $conf['invite_rate'] / 100, 2);
-				if($invite_money > $reducemoney) $invite_money = $reducemoney;
-				if($invite_money > 0){
-					changeUserMoney($upid, $invite_money, true, '邀请返现', $srow['trade_no']);
+		if(!$conf['invite_mode']){
+			$upid = $DB->findColumn('user', 'upid', ['uid'=>$srow['uid']]);
+			if($upid > 0){
+				$upgid = $DB->findColumn('user', 'gid', ['uid'=>$upid]);
+				$groupconfig = getGroupConfig($upgid);
+				$conf_n = array_merge($conf, $groupconfig);
+				if($conf_n['invite_open'] == 1 && !empty($conf_n['invite_rate'])){
+					if($conf_n['invite_order_type']==2){
+						$invite_money = round($profitmoney * $conf_n['invite_rate'] / 100, 2);
+					}elseif($conf_n['invite_order_type']==1){
+						$invite_money = round($reducemoney * $conf_n['invite_rate'] / 100, 2);
+					}else{
+						$invite_money = round($srow['money'] * $conf_n['invite_rate'] / 100, 2);
+						if(!$conf_n['invite_order_fee']){
+							if($invite_money > $reducemoney) $invite_money = $reducemoney;
+						}
+					}
+					if($invite_money > 0){
+						changeUserMoney($upid, $invite_money, true, '邀请返现', $srow['trade_no']);
+					}
 				}
 			}
 		}
@@ -636,11 +717,45 @@ function processOrder($srow,$notify=true){
 			$DB->exec("UPDATE pre_channel SET daystatus=1 WHERE id='{$channel['id']}'");
 		}
 	}
+	if($channel['daymaxorder'] > 0){
+		$orders = $DB->getColumn("SELECT COUNT(*) FROM pre_order WHERE channel='{$channel['id']}' AND status>0 AND date=CURDATE()");
+		if($orders >= $channel['daymaxorder']){
+			$DB->exec("UPDATE pre_channel SET daystatus=1 WHERE id='{$channel['id']}'");
+		}
+	}
 	if($srow['profits']>0){ //订单分账处理
-		$psreceiver = $DB->find('psreceiver', '*', ['id'=>$srow['profits']]);
+		$psreceiver = \lib\ProfitSharing\CommUtil::getReceiver($srow['profits']);
 		if($psreceiver){
-			$psmoney = round(floor($srow['realmoney'] * $psreceiver['rate']) / 100, 2);
-			$DB->insert('psorder', ['rid'=>$psreceiver['id'], 'trade_no'=>$srow['trade_no'], 'api_trade_no'=>$srow['api_trade_no'], 'money'=>$psmoney, 'status'=>0, 'addtime'=>'NOW()']);
+			$status = in_array($srow['plugin'], \lib\ProfitSharing\CommUtil::$no_order_plugins) ? 2 : 0;
+			$allpsmoney = 0;
+			$rdata = [];
+			foreach($psreceiver['info'] as $receiver){
+				if(!empty($receiver['rate']) && $receiver['rate']>0){
+					$psmoney = round(floor($srow['realmoney'] * $receiver['rate']) / 100, 2);
+					$rdata[] = ['account'=>$receiver['account'], 'money'=>$psmoney];
+					$allpsmoney += $psmoney;
+				}
+			}
+			$delay = ($srow['plugin'] == 'wxpaynp' || $srow['plugin'] == 'alipayd') && $conf['direct_settle_time'] == 1 ? 1 : 0;
+			if(($srow['plugin'] == 'wxpaynp' || $srow['plugin'] == 'alipayd') && $srow['combine'] == 1){
+				$sub_orders = \lib\Payment::getSubOrders($srow['trade_no']);
+				if(!empty($sub_orders)){
+					foreach($sub_orders as $sub_order){
+						$allpsmoney = 0;
+						$rdata = [];
+						foreach($psreceiver['info'] as $receiver){
+							if(!empty($receiver['rate']) && $receiver['rate']>0){
+								$psmoney = round(floor($sub_order['money'] * $receiver['rate']) / 100, 2);
+								$rdata[] = ['account'=>$receiver['account'], 'money'=>$psmoney];
+								$allpsmoney += $psmoney;
+							}
+						}
+						$DB->insert('psorder', ['rid'=>$psreceiver['id'], 'trade_no'=>$srow['trade_no'], 'sub_trade_no'=>$sub_order['sub_trade_no'], 'api_trade_no'=>$sub_order['api_trade_no'], 'money'=>round($allpsmoney, 2), 'status'=>$status, 'addtime'=>'NOW()', 'delay'=>$delay, 'rdata'=>json_encode($rdata)]);
+					}
+				}
+			}else{
+				$DB->insert('psorder', ['rid'=>$psreceiver['id'], 'trade_no'=>$srow['trade_no'], 'api_trade_no'=>$srow['api_trade_no'], 'money'=>round($allpsmoney, 2), 'status'=>$status, 'addtime'=>'NOW()', 'delay'=>$delay, 'rdata'=>json_encode($rdata)]);
+			}
 		}
 	}
 }
@@ -648,8 +763,11 @@ function processOrder($srow,$notify=true){
 function changeUserMoney($uid, $money, $add=true, $type=null, $orderid=null){
 	global $DB;
 	if($money<=0)return;
-	if($type=='订单退款'){
-		$isrefund = $DB->getColumn("SELECT id FROM pre_record WHERE type='订单退款' AND trade_no=:orderid LIMIT 1", [':orderid'=>$orderid]);
+	if($type=='订单退款' && !empty($orderid)){
+		$isrefund = $DB->getColumn("SELECT id FROM pre_record WHERE uid=:uid AND type='订单退款' AND trade_no=:orderid LIMIT 1", [':uid'=>$uid, ':orderid'=>$orderid]);
+		if($isrefund)return;
+	}elseif($type=='代付退回' && !empty($orderid)){
+		$isrefund = $DB->getColumn("SELECT id FROM pre_record WHERE uid=:uid AND type='代付退回' AND trade_no=:orderid LIMIT 1", [':uid'=>$uid, ':orderid'=>$orderid]);
 		if($isrefund)return;
 	}
 	$DB->beginTransaction();
@@ -664,6 +782,21 @@ function changeUserMoney($uid, $money, $add=true, $type=null, $orderid=null){
 	$res = $DB->exec("UPDATE pre_user SET money=:money WHERE uid=:uid", [':money'=>$newmoney, ':uid'=>$uid]);
 	$DB->insert('record', ['uid'=>$uid, 'action'=>$action, 'money'=>$money, 'oldmoney'=>$oldmoney, 'newmoney'=>$newmoney, 'type'=>$type, 'trade_no'=>$orderid, 'date'=>'NOW()']);
 	$DB->commit();
+	return $res;
+}
+
+function changeUserMoney2($uid, $oldmoney, $money, $add=true, $type=null, $orderid=null){
+	global $DB;
+	if($money<=0)return;
+	if($add == true){
+		$action = 1;
+		$newmoney = round($oldmoney+$money, 2);
+	}else{
+		$action = 2;
+		$newmoney = round($oldmoney-$money, 2);
+	}
+	$res = $DB->exec("UPDATE pre_user SET money=:money WHERE uid=:uid", [':money'=>$newmoney, ':uid'=>$uid]);
+	$DB->insert('record', ['uid'=>$uid, 'action'=>$action, 'money'=>$money, 'oldmoney'=>$oldmoney, 'newmoney'=>$newmoney, 'type'=>$type, 'trade_no'=>$orderid, 'date'=>'NOW()']);
 	return $res;
 }
 
@@ -688,6 +821,9 @@ function transfer_do($type, $channel, $out_biz_no, $payee_account, $payee_real_n
 //转账回调处理
 function processTransfer($out_biz_no, $status, $errmsg = null){
 	\lib\Transfer::processNotify($out_biz_no, $status, $errmsg);
+}
+function processProfitSharing($trade_no, $status, $errmsg = null, $settle_no = null){
+	\lib\ProfitSharing\CommUtil::processNotify($trade_no, $status, $errmsg, $settle_no);
 }
 
 function ordername_replace($name,$oldname,$uid,$order,$outorder=null){
@@ -772,9 +908,9 @@ function check_cert($idcard, $name, $phone){
 	$post = ['idcard'=>$idcard, 'phone'=>$phone, 'realname'=>$name];
 	$data = get_curl($url.'?'.http_build_query($post), 0,0,0,0,0,0, ['Authorization: APPCODE '.$appcode, 'Content-Type: application/x-www-form-urlencoded; charset=UTF-8']);
 	$arr=json_decode($data,true);
-	if(array_key_exists('code',$arr) && $arr['code']==200){
+	if(isset($arr['code']) && $arr['code']==200){
 		return ['code'=>0, 'msg'=>$arr['msg']];
-	}elseif(array_key_exists('msg',$arr)){
+	}elseif(isset($arr['msg'])){
 		return ['code'=>-1, 'msg'=>$arr['msg']];
 	}else{
 		return ['code'=>-2, 'msg'=>'返回结果解析失败'];
@@ -832,20 +968,29 @@ function wx_get_access_token($appid, $secret) {
 
 function wxminipay_jump_scheme($wid, $orderid){
 	global $conf, $order, $siteurl;
+	$path = 'pages/pay/pay';
 	if($conf['wxminipay_path']) {
 		$path = $conf['wxminipay_path'];
-		$query = 'orderid='.$orderid.'&sign='.md5(SYS_KEY.$orderid.SYS_KEY);
-	}else{
-		$jump_url = $siteurl.'pay/wxminipay/'.$orderid.'/';
-		$path = 'pages/pay/pay';
-		$query = 'money='.$order['realmoney'].'&url='.$jump_url;
 	}
+	$jump_url = $siteurl.'pay/wxminipay/'.$orderid.'/';
+	$query = 'money='.$order['realmoney'].'&url='.$jump_url;
 	$wechat = new \lib\wechat\WechatAPI($wid);
 	return $wechat->generate_scheme($path, $query);
 }
 
+function wxminipay_jump_path($orderid){
+	global $conf, $order, $siteurl;
+	$path = 'pages/pay/pay';
+	if($conf['wxminipay_path']) {
+		$path = $conf['wxminipay_path'];
+	}
+	$jump_url = $siteurl.'pay/wxminipay/'.$orderid.'/';
+	$extraData = ['money'=>$order['realmoney'], 'url'=>$jump_url];
+	return $path . '?' . http_build_query($extraData);
+}
+
 function checkDomain($domain){
-	if(empty($domain) || !preg_match('/^[-$a-z0-9_*.]{2,512}$/i', $domain) || (stripos($domain, '.') === false) || substr($domain, -1) == '.' || substr($domain, 0 ,1) == '.' || substr($domain, 0 ,1) == '*' && substr($domain, 1 ,1) != '.' || substr_count($domain, '*')>1 || strpos($domain, '*')>0 || strlen($domain)<4) return false;
+	if(empty($domain) || !preg_match('/^[-$a-z0-9:_*.]{2,512}$/i', $domain) || (stripos($domain, '.') === false) || substr($domain, -1) == '.' || substr($domain, 0 ,1) == '.' || substr($domain, 0 ,1) == '*' && substr($domain, 1 ,1) != '.' || substr_count($domain, '*')>1 || strpos($domain, '*')>0 || strlen($domain)<4) return false;
 	return true;
 }
 
@@ -967,15 +1112,19 @@ function getDefendKey($pid, $trade_no){
 function verify_captcha($user_id = 'public'){
 	global $conf, $clientip;
 	$GtSdk = new \lib\GeetestLib($conf['captcha_id'], $conf['captcha_key']);
-	$data = array(
-		'user_id' => $user_id,
-		'client_type' => "web",
-		'ip_address' => $clientip
-	);
-	if ($_SESSION['gtserver'] == 1) {   //服务器正常
-		return $GtSdk->success_validate($_POST['geetest_challenge'], $_POST['geetest_validate'], $_POST['geetest_seccode'], $data);
-	}else{  //服务器宕机,走failback模式
-		return $GtSdk->fail_validate($_POST['geetest_challenge'],$_POST['geetest_validate'],$_POST['geetest_seccode']);
+	if($conf['captcha_version'] == '1'){
+		return $GtSdk->gt4_validate($_POST['captcha_id'], $_POST['lot_number'], $_POST['pass_token'], $_POST['gen_time'], $_POST['captcha_output']);
+	}else{
+		$data = array(
+			'user_id' => $user_id,
+			'client_type' => "web",
+			'ip_address' => $clientip
+		);
+		if ($_SESSION['gtserver'] == 1) {   //服务器正常
+			return $GtSdk->success_validate($_POST['geetest_challenge'], $_POST['geetest_validate'], $_POST['geetest_seccode'], $data);
+		}else{  //服务器宕机,走failback模式
+			return $GtSdk->fail_validate($_POST['geetest_challenge'],$_POST['geetest_validate'],$_POST['geetest_seccode']);
+		}
 	}
 }
 
@@ -998,7 +1147,7 @@ function verify_captcha4(){
 
 function getGroupConfig($gid){
 	global $DB;
-	$input_key = ['settle_rate', 'transfer_rate', 'invite_rate'];
+	$input_key = ['settle_open', 'settle_type', 'settle_transfer', 'user_transfer'];
 	$grouprow=$DB->getRow("SELECT config FROM pre_group WHERE gid='{$gid}' LIMIT 1");
 	if(!$grouprow)$grouprow=$DB->getRow("SELECT config FROM pre_group WHERE gid=0 LIMIT 1");
 	$config = [];
@@ -1006,7 +1155,8 @@ function getGroupConfig($gid){
 	if($grouprow['config']){
 		$arr = json_decode($grouprow['config'], true);
 		foreach($arr as $key=>$value){
-			if(in_array($key, $input_key) && !isNullOrEmpty($value) || !in_array($key, $input_key) && $value>0){
+			if(!isNullOrEmpty($value)){
+				if(in_array($key, $input_key) && $value=='0') continue;
 				if($key == 'settle_type') $value = $value-1;
 				$config[$key] = $value;
 			}
@@ -1017,10 +1167,22 @@ function getGroupConfig($gid){
 
 function get_alipay_userid(){
 	global $conf;
-	if($conf['login_alipay']==0) throw new Exception('未开启支付宝快捷登录');
-	$channel = \lib\Channel::get($conf['login_alipay']);
-	if(!$channel) throw new Exception('当前支付通道信息不存在');
+	if($conf['alipay_web_login']==0) throw new Exception('未配置支付宝网页快捷登录通道');
+	$channel = \lib\Channel::get($conf['alipay_web_login']);
+	if(!$channel) throw new Exception('支付宝网页快捷登录通道信息不存在');
 	$alipay_config = require(PLUGIN_ROOT.$channel['plugin'].'/inc/config.php');
+	return alipay_oauth($alipay_config, true);
+}
+
+function alipay_oauth($alipay_config = null){
+	global $conf;
+	if($alipay_config && $conf['alipay_web_login_all'] == 1 && $conf['alipay_web_login'] > 0 || !$alipay_config && $conf['alipay_web_login'] > 0){
+		$channel = \lib\Channel::get($conf['alipay_web_login']);
+		if($channel) {
+			$alipay_config = require(PLUGIN_ROOT.$channel['plugin'].'/inc/config.php');
+		}
+	}
+	if(!$alipay_config) throw new Exception('未配置支付宝网页快捷登录通道');
 	try{
 		$oauth = new \Alipay\AlipayOauthService($alipay_config);
 		if(isset($_GET['auth_code'])){
@@ -1032,14 +1194,82 @@ function get_alipay_userid(){
 				$user_id = $result['open_id'];
 				$user_type = 'openid';
 			}
+			if($conf['alipay_getmobile'] == 1 && defined('TRADE_NO')){
+				$userinfo = $oauth->userinfo($result['access_token']);
+				if(isset($userinfo['mobile'])){
+					global $DB;
+					$DB->update('order', ['buyer'=>$user_id, 'mobile'=>$userinfo['mobile']], ['trade_no'=>TRADE_NO]);
+					$black = $DB->find('blacklist', '*', ['type'=>0, 'content'=>$userinfo['mobile']], null, 1);
+					if($black){
+						throw new Exception('系统异常无法完成付款');
+					}
+				}
+			}
 			return [$user_type, $user_id];
 		}else{
 			$redirect_uri = (is_https() ? 'https://' : 'http://') . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];
-			$oauth->oauth($redirect_uri);
+			if($conf['alipay_getmobile'] == 1 && defined('TRADE_NO')){
+				$oauth->oauth($redirect_uri, null, 'auth_user');
+			}else{
+				$oauth->oauth($redirect_uri);
+			}
 		}
 	}catch(Exception $e){
 		throw new Exception('支付宝快捷登录失败！'.$e->getMessage());
 	}
+}
+
+function alipay_mini_oauth($auth_code, $alipay_config = null){
+	global $conf;
+	if($conf['alipay_mini_login'] > 0){
+		$channel = \lib\Channel::get($conf['alipay_mini_login']);
+		if($channel) {
+			$alipay_config = require(PLUGIN_ROOT.$channel['plugin'].'/inc/config.php');
+		}
+	}
+	if(!$alipay_config) throw new Exception('未配置支付宝小程序快捷登录通道');
+	try{
+		$oauth = new \Alipay\AlipayOauthService($alipay_config);
+		$result = $oauth->getToken($auth_code);
+		if(!empty($result['user_id'])){
+			$user_id = $result['user_id'];
+			$user_type = 'userid';
+		}else{
+			$user_id = $result['open_id'];
+			$user_type = 'openid';
+		}
+		if(!empty($_GET['phone_data']) && !empty($conf['alipay_aes_key'])){
+			$phone_data = json_decode($_GET['phone_data'], true);
+			if($phone_data){
+				$mobile = $oauth->decryptMobile($phone_data, $conf['alipay_aes_key']);
+				global $DB;
+				$DB->update('order', ['buyer'=>$user_id, 'mobile'=>$mobile], ['trade_no'=>TRADE_NO]);
+				$black = $DB->find('blacklist', '*', ['type'=>0, 'content'=>$mobile], null, 1);
+				if($black){
+					throw new Exception('系统异常无法完成付款');
+				}
+			}
+		}
+		return [$alipay_config['app_id'], $user_type, $user_id];
+	}catch(Exception $e){
+		throw new Exception('支付宝快捷登录失败！'.$e->getMessage());
+	}
+}
+
+function alipaymini_jump_scheme($orderid, $appid = null){
+	global $conf, $order, $siteurl;
+	if($conf['alipay_mini_login'] > 0){
+		$channel = \lib\Channel::get($conf['alipay_mini_login']);
+		if($channel) {
+			$appid = $channel['appid'];
+		}
+	}
+	$jump_url = $siteurl.'pay/alipaymini/'.$orderid.'/';
+	$path = 'pages/pay/pay';
+	$param = ['money'=>$order['realmoney'], 'url'=>$jump_url];
+	$page = $path.'?'.http_build_query($param);
+	$scheme_url = 'alipays://platformapi/startapp?appId='.$appid.'&page='.urlencode($page);
+	return $scheme_url;
 }
 
 function getBankCardInfo($cardno){
@@ -1072,11 +1302,41 @@ function convert_channel_data(){
 	}
 }
 
+function addon_update($name, $version){
+	global $DB, $conf, $dbconfig, $CACHE;
+	if(!$conf['addon_'.$name] || $conf['addon_'.$name] < $version){
+		$sql = ROOT.'install/addon_'.$name.'.sql';
+		if(file_exists($sql)){
+			$sql = file_get_contents($sql);
+			$sqls = explode(';', $sql);
+			foreach($sqls as $value){
+				$value = trim($value);
+				if(empty($value)) continue;
+				$value = str_replace('pre_',$dbconfig['dbqz'].'_',$value);
+				$DB->exec($value);
+			}
+		}
+		saveSetting('addon_'.$name, $version);
+		$CACHE->clear();
+	}
+}
+
 function generate_key_pair(){
 	$config = [
 		"private_key_bits" => 2048,
+		'private_key_type' => OPENSSL_KEYTYPE_RSA,
 	];
 	$res = openssl_pkey_new($config);
+	if(!$res) {
+		touch(SYSTEM_ROOT.'openssl.cnf');
+		$config = [
+			"config" => SYSTEM_ROOT.'openssl.cnf',
+			"private_key_bits" => 2048,
+			'private_key_type' => OPENSSL_KEYTYPE_RSA,
+		];
+		$res = openssl_pkey_new($config);
+		if(!$res) return null;
+	}
 	$privateKey = '';
 	openssl_pkey_export($res, $privateKey, null, $config);
 	$pubKey = openssl_pkey_get_details($res);
@@ -1088,7 +1348,7 @@ function pemToBase64($data){
 	$line = explode("\n", $data);
 	$base64 = '';
 	foreach($line as $row){
-		if(strpos($row, '-----BEGIN')!==false || strpos($row, '-----END')!==false) continue;
+		if(empty($row) || strpos($row, '-----BEGIN')!==false || strpos($row, '-----END')!==false) continue;
 		$base64 .= trim($row);
 	}
 	return $base64;
@@ -1109,4 +1369,73 @@ function echojson($array){
 
 function echojsonmsg($msg, $code = -1){
 	echojson(['code'=>$code, 'msg'=>$msg]);
+}
+
+function getScanPayType($authCode){
+	$prefix = substr($authCode,0,2);
+	$alipay_prefix = ['25', '26', '27', '28', '29', '30'];
+	$wxpay_prefix = ['10', '11', '12', '13', '14', '15'];
+	$qqpay_prefix = ['91'];
+	$bank_prefix = ['62'];
+	$ecny_prefix = ['01'];
+	if(in_array($prefix, $alipay_prefix)){
+		return 'alipay';
+	}elseif(in_array($prefix, $wxpay_prefix)){
+		return 'wxpay';
+	}elseif(in_array($prefix, $qqpay_prefix)){
+		return 'qqpay';
+	}elseif(in_array($prefix, $bank_prefix)){
+		return 'bank';
+	}elseif(in_array($prefix, $ecny_prefix)){
+		return 'ecny';
+	}else{
+		return 'unknown';
+	}
+}
+function check_proxy($url)
+{
+	global $conf;
+	$ch=curl_init($url);
+	$proxy_server = $conf['proxy_server'];
+	$proxy_port = intval($conf['proxy_port']);
+	if($conf['proxy_type'] == 'https'){
+		$proxy_type = CURLPROXY_HTTPS;
+	}elseif($conf['proxy_type'] == 'sock4'){
+		$proxy_type = CURLPROXY_SOCKS4;
+	}elseif($conf['proxy_type'] == 'sock5'){
+		$proxy_type = CURLPROXY_SOCKS5;
+	}else{
+		$proxy_type = CURLPROXY_HTTP;
+	}
+	curl_setopt($ch, CURLOPT_PROXYAUTH, CURLAUTH_BASIC);
+	curl_setopt($ch, CURLOPT_PROXY, $proxy_server);
+	curl_setopt($ch, CURLOPT_PROXYPORT, $proxy_port);
+	if(!empty($conf['proxy_user']) && !empty($conf['proxy_pwd'])){
+		$proxy_userpwd = $conf['proxy_user'].':'.$conf['proxy_pwd'];
+		curl_setopt($ch, CURLOPT_PROXYUSERPWD, $proxy_userpwd);
+	}
+	curl_setopt($ch, CURLOPT_PROXYTYPE, $proxy_type);
+	$httpheader[] = "Accept: */*";
+	$httpheader[] = "Accept-Language: zh-CN,zh;q=0.8";
+	$httpheader[] = "Connection: close";
+	curl_setopt($ch, CURLOPT_HTTPHEADER, $httpheader);
+	curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+	curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+	curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+	curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.108 Safari/537.36');
+	curl_setopt($ch, CURLOPT_TIMEOUT, 3);
+	curl_exec($ch);
+	$errno = curl_errno($ch);
+	if($errno){
+		$errmsg = curl_error($ch);
+		curl_close($ch);
+		throw new Exception($errmsg);
+	}
+	$httpCode = curl_getinfo($ch,CURLINFO_HTTP_CODE);
+	curl_close($ch);
+	if($httpCode >= 200 && $httpCode < 400){
+		return true;
+	}else{
+		throw new Exception('HTTP状态码异常：'.$httpCode);
+	}
 }

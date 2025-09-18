@@ -22,6 +22,9 @@ class SandpayClient
 
     private $apiUrl = 'https://openapi.sandpay.com.cn';
 
+    public $request_body;
+    public $response_body;
+
     public function __construct($accessMid, $privateKeyPwd, $isTest = 0){
         $this->accessMid = $accessMid;
         $this->privateKeyPwd = $privateKeyPwd;
@@ -40,6 +43,7 @@ class SandpayClient
         $aesKey = random(16);
         ksort($params);
         $data = json_encode($params, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $this->request_body = $data;
         $bizData = $this->aesEncrypt($data, $aesKey);
         $encryptKey = $this->rsaPublicEncrypt($aesKey);
         $publicParams = [
@@ -67,6 +71,7 @@ class SandpayClient
             if(!$decryptPlainText){
                 throw new \Exception('AES解密失败');
             }
+            $this->response_body = $decryptPlainText;
             $arr = json_decode($decryptPlainText, true);
             if(!$arr){
                 throw new \Exception('bizData解析失败');

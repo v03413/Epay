@@ -83,6 +83,7 @@ class ltzf_plugin
 			'timestamp' => time(),
 			'notify_url' => $conf['localurl'].'pay/notify/'.TRADE_NO.'/',
 			'return_url' => $siteurl.'pay/ok/'.TRADE_NO.'/',
+			'quit_url' => $siteurl.'pay/error/'.TRADE_NO.'/',
 		];
 		$sign_param = ['mch_id','out_trade_no','total_fee','body','timestamp','notify_url'];
 		$param['sign'] = self::make_sign($param, $sign_param, $channel['appkey']);
@@ -131,7 +132,7 @@ class ltzf_plugin
 			}
 			return ['type'=>'jump','url'=>$jump_url];
 		}
-		elseif(in_array('2',$channel['apptype']) && (checkmobile() || $device=='mobile')){
+		elseif(in_array('2',$channel['apptype']) && (checkmobile() && !checkwechat() || $device=='mobile' && $mdevice!='wechat')){
 			try{
 				$jump_url = self::addOrder('/api/wxpay/jump_h5');
 			}catch(Exception $ex){
@@ -195,6 +196,11 @@ class ltzf_plugin
 	//支付成功页面
 	static public function ok(){
 		return ['type'=>'page','page'=>'ok'];
+	}
+
+	//支付失败页面
+	static public function error(){
+		return ['type'=>'page','page'=>'error'];
 	}
 
 	//退款

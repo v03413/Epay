@@ -194,7 +194,7 @@ if($step==3){
 							<div class="form-group">
                                 <label class="col-sm-2 control-label">数据表前缀</label>
                                 <div class="col-sm-10">
-                                    <input type="text" name="dbqz" class="form-control" value="pay" required>
+                                    <input type="text" name="dbqz" class="form-control" value="pay" readonly>
                                 </div>
                             </div>
                             <div class="form-group">

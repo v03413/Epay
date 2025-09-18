@@ -24,6 +24,43 @@ class paypal_plugin
 				'type' => 'select',
 				'options' => [0=>'线上模式',1=>'沙盒模式'],
 			],
+			'currency_code' => [
+				'name' => '结算货币',
+				'type' => 'select',
+				'options' => [
+					'USD' => '美元 (USD)',
+					'AUD' => '澳元 (AUD)',
+					'BRL' => '巴西雷亚尔 (BRL)',
+					'CAD' => '加拿大元 (CAD)',
+					'CNY' => '人民币 (CNY)',
+					'CZK' => '克朗 (CZK)',
+					'DKK' => '丹麦克朗(DKK)',
+					'EUR' => '欧元 (EUR)',
+					'HKD' => '港币 (HKD)',
+					'HUF' => '匈牙利福林 (HUF)',
+					'INR' => '印度卢比 (INR)',
+					'ILS' => '以色列新谢克尔 (ILS)',
+					'JPY' => '日元 (JPY)',
+					'MYR' => '马来西亚林吉特 (MYR)',
+					'MXN' => '墨西哥比索 (MXN)',
+					'TWD' => '新台币 (TWD)',
+					'NZD' => '新西兰元 (NZD)',
+					'NOK' => '挪威克朗 (NOK)',
+					'PHP' => '菲律宾比索 (PHP)',
+					'PLN' => '波兰兹罗提 (PLN)',
+					'GBP' => '英镑 (GBP)',
+					'RUB' => '俄罗斯卢布 (RUB)',
+					'SGD' => '新加坡元 (SGD)',
+					'SEK' => '瑞典克朗 (SEK)',
+					'CHF' => '瑞士法郎 (CHF)',
+					'THB' => '泰铢 (THB)',
+				],
+			],
+			'currency_rate' => [
+				'name' => '货币汇率',
+				'type' => 'input',
+				'note' => '例如1元人民币兑换0.137美元(USD)，则此处填0.137',
+			],
 		],
 		'select' => null,
 		'note' => '', //支付密钥填写说明
@@ -36,13 +73,16 @@ class paypal_plugin
 
 		require_once(PAY_ROOT."inc/PayPalClient.php");
 
+		if(!$channel['currency_rate']) $channel['currency_rate'] = 1;
+		$money = round($order['realmoney'] * $channel['currency_rate'], 2);
+
 		$parameter = [
             'intent'            => 'CAPTURE',
             'purchase_units'    => [
                 [
                     'amount'        => [
-                        'currency_code' => 'USD',
-                        'value'         => $order['realmoney'],
+                        'currency_code' => $channel['currency_code'],
+                        'value'         => $money,
                     ],
                     'description'   => $order['name'],
 					'custom_id'     => TRADE_NO,
@@ -157,10 +197,13 @@ class paypal_plugin
 
 		require_once(PAY_ROOT."inc/PayPalClient.php");
 
+		if(!$channel['currency_rate']) $channel['currency_rate'] = 1;
+		$money = round($order['refundmoney'] * $channel['currency_rate'], 2);
+
 		$parameter = [
             'amount'    => [
-                'currency_code'  => 'USD',
-                'value'     => $order['refundmoney'],
+                'currency_code'  => $channel['currency_code'],
+                'value'     => $money,
             ],
         ];
 

@@ -14,6 +14,7 @@ class PayClient
     protected $appid;
     private $public_key;
     private $private_key;
+    public $res_code;
 
     public function __construct($appid, $public_key, $private_key, $isTest = false)
     {
@@ -25,6 +26,9 @@ class PayClient
 
     //发起API请求
     public function request($path, $data){
+		$data = array_filter($data, function ($value) {
+            return $value !== null;
+        });
         $requrl = $this->gateway_url . $path;
 
         $param = [
@@ -42,12 +46,14 @@ class PayClient
 
         $result = json_decode($response, true);
 
-        if(isset($result['code']) && $result['code']=='0000'){
-            if (!empty($result['sign'])) {
+        if(isset($result['code']) && ($result['code']=='0000' || $result['code']=='0001')){
+            $this->res_code = $result['code'];
+            /*if (!empty($result['sign']) && strpos($path, '/merchant/queryApplyResult')===false) {
                 if(!$this->verifySign($result, null)) throw new Exception('返回数据验签失败');
-            }
+            }*/
             return $result['respData'];
         }else{
+            $this->res_code = $result['code'];
             throw new Exception($result['msg']?$result['msg']:'返回数据解析失败');
         }
     }

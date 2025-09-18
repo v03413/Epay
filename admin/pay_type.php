@@ -95,7 +95,7 @@ echo '<tr><td><b>'.$res['name'].'</b></td><td><img src="/assets/icon/'.$res['nam
 	</div>
     </div>
   </div>
-<script src="<?php echo $cdnpublic?>layer/3.1.1/layer.min.js"></script>
+<script src="<?php echo $cdnpublic?>layer/3.1.1/layer.js"></script>
 <script>
 function addframe(){
 	$("#modal-store").modal('show');

@@ -131,6 +131,9 @@ class HuifuClient
      */
     private function makeSign($params)
     {
+        $params = array_filter($params, function ($value) {
+            return $value !== null;
+        });
         ksort($params);
         $content = json_encode($params, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
         return $this->rsaPrivateSign($content);

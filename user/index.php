@@ -1,4 +1,5 @@
 <?php
+$is_defend=true;
 include("../includes/common.php");
 
 if(isset($_GET['invite'])){
@@ -11,7 +12,7 @@ if(isset($_GET['invite'])){
 
 if($islogin2==1){}else exit("<script language='javascript'>window.location.href='./login.php';</script>");
 
-if(empty($userrow['account']) || empty($userrow['username'])){
+if(!$conf['reg_input_settle'] && (empty($userrow['account']) || empty($userrow['username']))){
 	exit("<script language='javascript'>window.location.href='./completeinfo.php';</script>");
 }
 
@@ -109,7 +110,7 @@ if(empty($userrow['pwd'])){
 			    <div class="top text-right w-full"><i class="fa fa-caret-down text-warning m-r-sm"></i></div>
 			  <div class="row">
 			  <div class="col-xs-3"><div class="round"><i class="fa fa-money fa-fw"></i></div></div>
-			  <div class="col-xs-9"><div class="h1 text-primary-dk font-thin h1"><span class="text-muted text-md">￥</span><?php echo $userrow['money']?></div><span class="text-muted">商户当前余额</span></div>
+			  <div class="col-xs-9"><div class="h1 text-primary-dk font-thin h1"><span class="text-muted text-md">¥</span><?php echo $userrow['money']?></div><span class="text-muted">商户当前余额</span></div>
 			  </div>
 			  </div>
             </div>
@@ -118,7 +119,7 @@ if(empty($userrow['pwd'])){
 			    <div class="top text-right w-full"><i class="fa fa-caret-down text-warning m-r-sm"></i></div>
 			  <div class="row">
 			  <div class="col-xs-3"><div class="round"><i class="fa fa-check-square-o fa-fw"></i></div></div>
-			  <div class="col-xs-9"><div class="h1 text-dark-dk font-thin h1"><span class="text-muted text-md">￥</span><span id="settle_money"></span></div><span class="text-muted">已结算余额</span></div>
+			  <div class="col-xs-9"><div class="h1 text-dark-dk font-thin h1"><span class="text-muted text-md">¥</span><span id="settle_money"></span></div><span class="text-muted">已结算余额</span></div>
 			  </div>
 			  </div>
             </div>
@@ -166,6 +167,18 @@ if(empty($userrow['pwd'])){
                 <i class="fa fa-plus-circle fa-fw"></i><span>昨日收入</span>
               </a>
             </div>
+			<?php if($conf['user_transfer']==1){?>
+			<div class="hbox text-center b-t b-light bg-light">          
+              <a class="col padder-v text-muted b-r b-light">
+                <div class="h3"><span id="transfer_today_all"></span></div>
+                <i class="fa fa-send fa-fw"></i><span>今日支出</span>
+              </a>
+              <a class="col padder-v text-muted">
+                <div class="h3"><span id="transfer_lastday_all"></span></div>
+                <i class="fa fa-send-o fa-fw"></i><span>昨日支出</span>
+              </a>
+            </div>
+			<?php }?>
           </div>
 
 		  <div class="panel panel-default text-center">
@@ -175,7 +188,7 @@ if(empty($userrow['pwd'])){
 		<div class="table-responsive">
 		<table class="table table-striped">
 		<thead><tr id="paytypes"></tr></thead>
-		<tbody><tr id="order_today"></tr><tr id="order_lastday"></tr><tr id="payrates"></tr></tbody>
+		<tbody><tr id="order_today"></tr><tr id="order_lastday"></tr><tr id="success_rate"></tr><tr id="payrates"></tr></tbody>
 		</table>
 		</div>
 		</div>
@@ -211,7 +224,7 @@ if(empty($userrow['pwd'])){
                 yaxis:{ font: { color: '#a1a7ac' }, max:<?php echo ($max_settle+10)?> },
                 grid: { hoverable: true, clickable: true, borderWidth: 0, color: '#dce5ec' },
                 tooltip: true,
-                tooltipOpts: { content: '结算金额￥%y',  defaultTheme: false, shifts: { x: 10, y: -25 } }
+                tooltipOpts: { content: '结算金额¥%y',  defaultTheme: false, shifts: { x: 10, y: -25 } }
               }
             " style="height:246px" >
             </div>
@@ -237,12 +250,15 @@ $(document).ready(function(){
 			$('#settle_money').html(data.settle_money);
 			$('#order_today_all').html(data.order_today_all);
 			$('#order_lastday_all').html(data.order_lastday_all);
+			$('#transfer_today_all').html(data.transfer_today_all);
+			$('#transfer_lastday_all').html(data.transfer_lastday_all);
 			$.each(data.channels, function (i, item) {
 				$('#paytypes').append('<th style="text-align:center;"><img src="/assets/icon/'+item.name+'.ico" width="18px">&nbsp;'+item.showname+'</th>');
 			});
 			$.each(data.channels, function (i, item) {
 				$('#order_today').append('<td>今日：'+item.order_today+' 元</td>');
 				$('#order_lastday').append('<td>昨日：'+item.order_lastday+' 元</td>');
+				$('#success_rate').append('<td>成功率：'+item.success_rate+' %</td>');
 				$('#payrates').append('<td>费率：'+item.rate+' %</td>');
 			});
 		}

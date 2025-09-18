@@ -27,7 +27,7 @@ if(!$conf['apiurl'])$conf['apiurl'] = $siteurl;
 						<div class="form-group">
 							<label>商户私钥</label>
 							<textarea class="form-control" name="merchant_private_key" rows="5" readonly></textarea>
-							<center><a href="javascript:;" class="btn btn-default" data-clipboard-text="124124" title="点击复制" id="merchant_private_key_copy"><i class="fa fa-copy"></i> 复制</a></center>
+							<center><a href="javascript:;" class="btn btn-default" data-clipboard-text="" title="点击复制" id="merchant_private_key_copy"><i class="fa fa-copy"></i> 复制</a></center>
 						</div>
 					</div>
 					<div class="modal-footer">
@@ -159,7 +159,7 @@ if(!$conf['apiurl'])$conf['apiurl'] = $siteurl;
     </div>
   </div>
 <?php include 'foot.php';?>
-<script src="<?php echo $cdnpublic?>layer/3.1.1/layer.min.js"></script>
+<script src="<?php echo $cdnpublic?>layer/3.1.1/layer.js"></script>
 <script src="<?php echo $cdnpublic?>clipboard.js/1.7.1/clipboard.min.js"></script>
 <script>
 $(document).ready(function(){

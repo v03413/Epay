@@ -36,11 +36,11 @@ if($my=='add')
 <h4><font color="blue">基本信息</font></h4>
 <div class="form-group">
 <label>手机号(登录账号):</label><br>
-<input type="text" class="form-control" name="phone" value="" placeholder="可留空">
+<input type="text" class="form-control" name="phone" value="" placeholder="和邮箱不能同时为空">
 </div>
 <div class="form-group">
 <label>邮箱(登录账号):</label><br>
-<input type="text" class="form-control" name="email" value="" placeholder="可留空">
+<input type="text" class="form-control" name="email" value="" placeholder="和手机号不能同时为空">
 </div>
 <div class="form-group">
 <label>登录密码:</label><br>
@@ -63,12 +63,12 @@ if($my=='add')
 <label>结算方式:</label><br><select class="form-control" name="settle_id"><?php echo $settle_select?></select>
 </div>
 <div class="form-group">
-<label>*结算账号:</label><br>
-<input type="text" class="form-control" name="account" value="" required>
+<label>结算账号:</label><br>
+<input type="text" class="form-control" name="account" value="" placeholder="不使用平台代收可留空">
 </div>
 <div class="form-group">
-<label>*结算账号姓名:</label><br>
-<input type="text" class="form-control" name="username" value="" required>
+<label>结算账号姓名:</label><br>
+<input type="text" class="form-control" name="username" value="" placeholder="不使用平台代收可留空">
 </div>
 <h4><font color="blue">功能开关</font></h4>
 <div class="form-group">
@@ -108,6 +108,7 @@ $group=\lib\Channel::getGroup($row['gid']);
 <div class="panel-body">
 <ul class="nav nav-tabs">
 <li align="center" class="active"><a href="#">基本信息</a></li>
+<li align="center"><a href="./uset.php?my=api&uid=<?php echo $uid?>">密钥信息</a></li>
 <?php if($group['settings']){?><li align="center"><a href="./uset.php?my=edit2&uid=<?php echo $uid?>">自定义接口信息</a></li><?php }?>
 <?php if($group['subchannel_type']){?><li align="center"><a href="./uset.php?my=subchannel&uid=<?php echo $uid?>">自定义子通道</a></li><?php }?>
 </ul>
@@ -117,11 +118,11 @@ $group=\lib\Channel::getGroup($row['gid']);
 <h4><font color="blue">基本信息</font></h4>
 <div class="form-group">
 <label>手机号(登录账号):</label><br>
-<input type="text" class="form-control" name="phone" value="<?php echo $row['phone']?>" placeholder="可留空">
+<input type="text" class="form-control" name="phone" value="<?php echo $row['phone']?>" placeholder="和邮箱不能同时为空">
 </div>
 <div class="form-group">
 <label>邮箱(登录账号):</label><br>
-<input type="text" class="form-control" name="email" value="<?php echo $row['email']?>" placeholder="可留空">
+<input type="text" class="form-control" name="email" value="<?php echo $row['email']?>" placeholder="和手机号不能同时为空">
 </div>
 <div class="form-group">
 <label>商户余额:</label><br>
@@ -144,17 +145,25 @@ $group=\lib\Channel::getGroup($row['gid']);
 <input type="text" class="form-control" name="ordername" value="<?php echo $row['ordername']?>" placeholder="默认以系统设置里面的为准">
 <font color="green">支持变量值：[name]原商品名称，[order]支付订单号，[outorder]商户订单号，[time]时间戳，[qq]当前商户的联系QQ</font>
 </div>
+<div class="form-group">
+<label>商户保证金余额:</label><br>
+<input type="text" class="form-control" name="deposit" value="<?php echo $row['deposit']?>" placeholder="开启商户保证金功能后使用">
+</div>
+<div class="form-group">
+<label>预留余额:</label><br>
+<input type="text" class="form-control" name="remain_money" value="<?php echo $row['remain_money']?>" placeholder="可设置预留部分商户余额不参与每日自动结算，数字后加%即为百分比">
+</div>
 <h4><font color="blue">结算信息</font></h4>
 <div class="form-group">
 <label>结算方式:</label><br><select class="form-control" name="settle_id" default="<?php echo $row['settle_id']?>"><?php echo $settle_select?></select>
 </div>
 <div class="form-group">
 <label>结算账号:</label><br>
-<input type="text" class="form-control" name="account" value="<?php echo $row['account']?>" required>
+<input type="text" class="form-control" name="account" value="<?php echo $row['account']?>" placeholder="不使用平台代收可留空">
 </div>
 <div class="form-group">
 <label>结算账号姓名:</label><br>
-<input type="text" class="form-control" name="username" value="<?php echo $row['username']?>" required>
+<input type="text" class="form-control" name="username" value="<?php echo $row['username']?>" placeholder="不使用平台代收可留空">
 </div>
 </div>
 <div class="col-sm-12 col-md-6">
@@ -188,6 +197,9 @@ $group=\lib\Channel::getGroup($row['gid']);
 <div class="form-group">
 <label>手续费扣除模式:</label><br><select class="form-control" name="mode" default="<?php echo $row['mode']?>"><option value="0">余额扣费</option><option value="1">订单加费</option></select>
 </div>
+<div class="form-group">
+<label>聚合收款码:</label><br><select class="form-control" name="open_code" default="<?php echo $row['open_code']?>"><option value="0">缺省（与系统设置一致）</option><option value="1">开启</option><option value="2">关闭</option></select>
+</div>
 <div class="row">
 	<div class="col-md-4 col-sm-12">
 		<div class="form-group">
@@ -205,6 +217,10 @@ $group=\lib\Channel::getGroup($row['gid']);
 		</div>
 	</div>
 </div>
+<div class="form-group">
+<label>邀请方商户ID:</label><br>
+<input type="text" class="form-control" name="upid" value="<?php echo $row['upid'] == 0 ? '' : $row['upid']?>" placeholder="用于邀请返现">
+</div>
 <h4><font color="blue">密码修改</font></h4>
 <div class="form-group">
 <label>重置登录密码:</label><br>
@@ -221,7 +237,113 @@ for (i = 0; i < items.length; i++) {
 	$(items[i]).val($(items[i]).attr("default")||0);
 }
 </script>
-<?php }
+<?php
+}
+elseif($my=='api')
+{
+$uid=intval($_GET['uid']);
+$row=$DB->getRow("select * from pre_user where uid='$uid' limit 1");
+if(!$row)showmsg('该商户不存在',4);
+$group=\lib\Channel::getGroup($row['gid']);
+if(!$conf['apiurl'])$conf['apiurl'] = $siteurl;
+?>
+		<div class="modal inmodal fade" id="myModal" tabindex="-1" role="dialog" aria-hidden="true" data-backdrop="">
+			<div class="modal-dialog">
+				<div class="modal-content">
+					<div class="modal-header">
+						<button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">&times;</span><span class="sr-only">关闭</span>
+						</button>
+						<h4 class="modal-title">商户私钥查看窗口</h4>
+					</div>
+					<div class="modal-body">
+						<div class="form-group"><font color="red"><i class="fa fa-info-circle"></i> 请及时复制保存商户私钥！当前窗口关闭后，无法再次查询商户私钥，本站也不会保存。如遗失商户私钥，可重新生成进行替换。</font></div>
+						<div class="form-group">
+							<label>商户私钥</label>
+							<textarea class="form-control" name="merchant_private_key" rows="5" readonly></textarea>
+							<center><a href="javascript:;" class="btn btn-default" data-clipboard-text="" title="点击复制" id="merchant_private_key_copy"><i class="fa fa-copy"></i> 复制</a></center>
+						</div>
+					</div>
+					<div class="modal-footer">
+						<button type="button" class="btn btn-white" data-dismiss="modal">关闭</button>
+					</div>
+				</div>
+			</div>
+		</div>
+<div class="col-md-12 col-lg-10 center-block" style="float: none;">
+<div class="panel panel-primary">
+<div class="panel-heading"><h3 class="panel-title">商户密钥信息 UID:<?php echo $uid?></h3></div>
+<div class="panel-body">
+<ul class="nav nav-tabs">
+<li align="center"><a href="./uset.php?my=edit&uid=<?php echo $uid?>">基本信息</a></li>
+<li align="center" class="active"><a href="#">密钥信息</a></li>
+<?php if($group['settings']){?><li align="center"><a href="./uset.php?my=edit2&uid=<?php echo $uid?>">自定义接口信息</a></li><?php }?>
+<?php if($group['subchannel_type']){?><li align="center"><a href="./uset.php?my=subchannel&uid=<?php echo $uid?>">自定义子通道</a></li><?php }?>
+</ul>
+<form class="form-horizontal">
+	<input type="hidden" name="uid" value="<?php echo $uid?>"/>
+	<div class="form-group">
+		<label class="col-sm-2 control-label">接口地址</label>
+		<div class="col-sm-9">
+			<div class="input-group"><input class="form-control" type="text" value="<?php echo $conf['apiurl']?>" readonly><div class="input-group-addon"><a href="javascript:;" class="copy-btn" data-clipboard-text="<?php echo $conf['apiurl']?>" title="点击复制"><i class="fa fa-copy"></i></a></div></div>
+		</div>
+	</div>
+	<div class="form-group">
+		<label class="col-sm-2 control-label">商户ID</label>
+		<div class="col-sm-9">
+			<div class="input-group"><input class="form-control" type="text" value="<?php echo $uid?>" readonly><div class="input-group-addon"><a href="javascript:;" class="copy-btn" data-clipboard-text="<?php echo $uid?>" title="点击复制"><i class="fa fa-copy"></i></a></div></div>
+		</div>
+	</div>
+	<div class="form-group"><div class="col-sm-offset-2 col-sm-4"><h4>V1接口（MD5签名方式）：</h4></div></div>
+	<div class="form-group">
+		<label class="col-sm-2 control-label">商户MD5密钥</label>
+		<div class="col-sm-9">
+			<div class="input-group"><input class="form-control" type="text" value="<?php echo $row['key']?>" readonly><div class="input-group-addon"><a href="javascript:;" class="copy-btn" data-clipboard-text="<?php echo $row['key']?>" title="点击复制"><i class="fa fa-copy"></i></a></div></div>
+		</div>
+	</div>
+	<div class="form-group">
+		<div class="col-sm-offset-2 col-sm-4"><a href="/doc_old.html" class="btn btn-sm btn-info" target="_blank">查看V1开发文档</a>&nbsp;&nbsp;<a href="javascript:resetKey()" class="btn btn-sm btn-danger">重置商户MD5密钥</a>
+		</div>
+	</div>
+	<div class="form-group"><div class="col-sm-offset-2 col-sm-4"><h4>V2接口（RSA签名方式）：</h4></div></div>
+	<div class="form-group">
+		<label class="col-sm-2 control-label">平台公钥</label>
+		<div class="col-sm-9">
+			<div class="input-group"><textarea class="form-control" name="platform_public_key" rows="3" readonly><?php echo $conf['public_key']?></textarea><div class="input-group-addon"><a href="javascript:;" class="copy-btn" data-clipboard-text="<?php echo $conf['public_key']?>" title="点击复制"><i class="fa fa-copy"></i></a></div></div>
+		</div>
+	</div>
+	<div class="form-group">
+		<label class="col-sm-2 control-label">商户公钥</label>
+		<div class="col-sm-9">
+			<div class="input-group"><textarea class="form-control" name="merchant_public_key" rows="3" readonly><?php echo $row['publickey']?></textarea><div class="input-group-addon"><a href="javascript:;" class="copy-btn" title="点击复制" onclick="alert('请仔细分清各种密钥区别，只需要复制平台公钥和商户私钥即可！如商户私钥遗失请重新生成。')"><i class="fa fa-copy"></i></a></div></div>
+		</div>
+	</div>
+	<div class="form-group">
+		<div class="col-sm-offset-2 col-sm-4"><a href="/doc.html" class="btn btn-sm btn-info" target="_blank">查看V2开发文档</a>&nbsp;&nbsp;<?php if($row['publickey']){?><a href="javascript:createRsaPair()" class="btn btn-sm btn-danger">重置商户RSA密钥对</a><?php }else{?><a href="javascript:createRsaPair()" class="btn btn-sm btn-success">生成商户RSA密钥对</a><?php }?>
+		</div>
+	</div>
+	<div class="line line-dashed b-b line-lg pull-in"></div>
+	<div class="form-group"><div class="col-sm-offset-2 col-sm-4"><h4>签名方式开关设置：</h4></div></div>
+	<div class="form-group">
+		<label class="col-sm-2 control-label">签名方式开关</label>
+		<div class="col-sm-9">
+			<select class="form-control" name="keytype" default="<?php echo $row['keytype']?>"><option value="0">开启MD5+RSA签名（兼容模式）</option><option value="1">仅开启RSA签名（安全模式）</option></select>
+		</div>
+	</div>
+	<div class="form-group">
+		<div class="col-sm-offset-2 col-sm-4"><input type="button" id="editKeyType" value="确定修改" class="btn btn-primary form-control"/><br/>
+		</div>
+	</div>
+</form>
+<br/><a href="./ulist.php">>>返回商户列表</a>
+</div></div>
+<script>
+var items = $("select[default]");
+for (i = 0; i < items.length; i++) {
+	$(items[i]).val($(items[i]).attr("default")||0);
+}
+</script>
+<?php
+}
 elseif($my=='edit2')
 {
 $uid=intval($_GET['uid']);
@@ -236,6 +358,7 @@ $channelinfo = json_decode($row['channelinfo'], true);
 <div class="panel-body">
 <ul class="nav nav-tabs">
 <li align="center"><a href="./uset.php?my=edit&uid=<?php echo $uid?>">基本信息</a></li>
+<li align="center"><a href="./uset.php?my=api&uid=<?php echo $uid?>">密钥信息</a></li>
 <li align="center" class="active"><a href="#">自定义接口信息</a></li>
 <?php if($group['subchannel_type']){?><li align="center"><a href="./uset.php?my=subchannel&uid=<?php echo $uid?>">自定义子通道</a></li><?php }?>
 </ul>
@@ -252,7 +375,8 @@ foreach(explode(',',$group['settings']) as $row){
 <input type="submit" class="btn btn-primary btn-block" value="确定修改"></form>
 <br/><a href="./ulist.php">>>返回商户列表</a>
 </div></div>
-<?php }
+<?php
+}
 elseif($my=='subchannel')
 {
 $uid=intval($_GET['uid']);
@@ -272,7 +396,7 @@ foreach($rs as $row){
 	}
 }
 unset($rs);
-$list = $DB->getAll("SELECT A.*,B.type,B.name channelname FROM pre_subchannel A LEFT JOIN pre_channel B ON A.channel=B.id WHERE uid='$uid' ORDER BY A.id ASC");
+$list = $DB->getAll("SELECT A.*,B.type,B.name channelname FROM pre_subchannel A LEFT JOIN pre_channel B ON A.channel=B.id WHERE A.uid='$uid' ORDER BY A.id ASC");
 ?>
 <style>td{overflow: hidden;text-overflow: ellipsis;white-space: nowrap;max-width:300px;}</style>
 <div class="modal" id="modal-store" role="dialog" aria-labelledby="myModalLabel" aria-hidden="true" data-backdrop="static">
@@ -325,6 +449,7 @@ $list = $DB->getAll("SELECT A.*,B.type,B.name channelname FROM pre_subchannel A 
 <div class="panel-body">
 <ul class="nav nav-tabs">
 <li align="center"><a href="./uset.php?my=edit&uid=<?php echo $uid?>">基本信息</a></li>
+<li align="center"><a href="./uset.php?my=api&uid=<?php echo $uid?>">密钥信息</a></li>
 <?php if($group['settings']){?><li align="center"><a href="./uset.php?my=edit2&uid=<?php echo $uid?>">自定义接口信息</a></li><?php }?>
 <li align="center" class="active"><a href="#">自定义子通道</a></li>
 </ul>
@@ -357,7 +482,103 @@ echo '<tr><td><b>'.$res['id'].'</b></td><td><img src="/assets/icon/'.$paytypes[$
     </div>
   </div>
 <script src="<?php echo $cdnpublic?>layer/3.1.1/layer.js"></script>
+<script src="<?php echo $cdnpublic?>clipboard.js/1.7.1/clipboard.min.js"></script>
 <script>
+$(document).ready(function(){
+var clipboard = new Clipboard('.copy-btn');
+clipboard.on('success', function (e) {
+	layer.msg('复制成功！', {icon: 1});
+});
+clipboard.on('error', function (e) {
+	layer.msg('复制失败，请长按链接后手动复制', {icon: 2});
+});
+var clipboard = new Clipboard('#merchant_private_key_copy', {
+	container: document.getElementById('myModal')
+});
+clipboard.on('success', function (e) {
+	layer.msg('复制成功！', {icon: 1});
+});
+clipboard.on('error', function (e) {
+	layer.msg('复制失败，请长按链接后手动复制', {icon: 2});
+});
+$("#editKeyType").click(function(){
+	var uid = $("input[name='uid']").val();
+	var keytype=$("select[name='keytype']").val();
+	var ii = layer.load(2, {shade:[0.1,'#fff']});
+	$.ajax({
+		type : "POST",
+		url : "ajax_user.php?act=edit_keytype",
+		data : {uid:uid, keytype:keytype},
+		dataType : 'json',
+		success : function(data) {
+			layer.close(ii);
+			if(data.code == 1){
+				layer.alert('修改成功！', {icon:1});
+			}else{
+				layer.alert(data.msg);
+			}
+		}
+	});
+});
+});
+function resetKey(){
+	var uid = $("input[name='uid']").val();
+	var confirmobj = layer.confirm('是否确认重置该商户的MD5密钥？', {
+	  btn: ['确定','取消']
+	}, function(){
+		$.ajax({
+			type : 'POST',
+			url : 'ajax_user.php?act=resetKey',
+			data : {uid: uid},
+			dataType : 'json',
+			success : function(data) {
+				if(data.code == 0){
+					layer.alert('重置密钥成功！', {icon:1}, function(){window.location.reload()});
+				}else{
+					layer.alert(data.msg, {icon:2});
+				}
+			},
+			error:function(data){
+				layer.msg('服务器错误');
+				return false;
+			}
+		});
+	}, function(){
+		layer.close(confirmobj);
+	});
+}
+function createRsaPair(){
+	var uid = $("input[name='uid']").val();
+	var confirmobj = layer.confirm('是否确定生成该商户的RSA密钥对？', {
+	  btn: ['确定','取消']
+	}, function(){
+		$.ajax({
+			type : 'POST',
+			url : 'ajax_user.php?act=createRsaPair',
+			data : {uid: uid},
+			dataType : 'json',
+			success : function(data) {
+				if(data.code == 0){
+					$("textarea[name='merchant_private_key']").val(data.private_key);
+					$("textarea[name='merchant_public_key']").val(data.public_key);
+					$("#merchant_private_key_copy").attr('data-clipboard-text', data.private_key);
+					layer.alert('商户RSA密钥对生成成功', {icon:1}, function(){
+						layer.closeAll();
+						$('#myModal').modal('show');
+					});
+				}else{
+					layer.alert(data.msg, {icon:2});
+				}
+			},
+			error:function(data){
+				layer.msg('服务器错误');
+				return false;
+			}
+		});
+	}, function(){
+		layer.close(confirmobj);
+	});
+}
 function addUser(obj){
 	var ii = layer.load(2, {shade:[0.1,'#fff']});
 	$.ajax({

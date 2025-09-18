@@ -88,8 +88,18 @@ if(isset($_GET['ok']) && isset($_GET['trade_no'])){
 </div>
 <script src="<?php echo $cdnpublic?>jquery/3.4.1/jquery.min.js"></script>
 <script src="<?php echo $cdnpublic?>twitter-bootstrap/3.4.1/js/bootstrap.min.js"></script>
-<script src="<?php echo $cdnpublic?>layer/3.1.1/layer.min.js"></script>
+<script src="<?php echo $cdnpublic?>layer/3.1.1/layer.js"></script>
 <script src="//static.geetest.com/static/tools/gt.js"></script>
+<script>
+window.appendChildOrg = Element.prototype.appendChild;
+Element.prototype.appendChild = function() {
+    if(arguments[0].tagName == 'SCRIPT'){
+        arguments[0].setAttribute('referrerpolicy', 'no-referrer');
+    }
+    return window.appendChildOrg.apply(this, arguments);
+};
+</script>
+<script src="//static.geetest.com/v4/gt4.js"></script>
 <script>
 var captcha_open = 0;
 var handlerEmbed = function (captchaObj) {
@@ -101,7 +111,7 @@ var handlerEmbed = function (captchaObj) {
 		if (!result) {
 			return alert('请完成验证');
 		}
-		$("#captchaform").html('<input type="hidden" name="geetest_challenge" value="'+result.geetest_challenge+'" /><input type="hidden" name="geetest_validate" value="'+result.geetest_validate+'" /><input type="hidden" name="geetest_seccode" value="'+result.geetest_seccode+'" />');
+		$.captchaResult = result;
 		$.captchaObj = captchaObj;
 	});
 };
@@ -113,21 +123,14 @@ function submitPay(obj){
 		layer.alert("金额不能为空");
 		return false;
 	}
-	var data = {money:money, typeid:typeid, csrf_token:csrf_token};
-	if(captcha_open == 1){
-		var geetest_challenge = $("input[name='geetest_challenge']").val();
-		var geetest_validate = $("input[name='geetest_validate']").val();
-		var geetest_seccode = $("input[name='geetest_seccode']").val();
-		if(geetest_challenge == ""){
-			layer.alert('请先完成滑动验证！'); return false;
-		}
-		var adddata = {geetest_challenge:geetest_challenge, geetest_validate:geetest_validate, geetest_seccode:geetest_seccode};
+	if(captcha_open == 1 && !$.captchaResult){
+		layer.alert('请先完成滑动验证！'); return false;
 	}
 	var ii = layer.load();
 	$.ajax({
 		type: "POST",
 		dataType: "json",
-		data: Object.assign(data, adddata),
+		data: {money:money, typeid:typeid, csrf_token:csrf_token, ...$.captchaResult},
 		url: "ajax.php?act=testpay",
 		success: function (data, textStatus) {
 			layer.close(ii);
@@ -148,20 +151,32 @@ $(document).ready(function(){
 	if($("#captcha").length>0) captcha_open=1;
 	if(captcha_open==1){
 	$.ajax({
-		url: "./ajax.php?act=captcha&t=" + (new Date()).getTime(),
+		url: "ajax.php?act=captcha",
 		type: "get",
+		cache: false,
 		dataType: "json",
 		success: function (data) {
 			$('#captcha_text').hide();
 			$('#captcha_wait').show();
-			initGeetest({
-				gt: data.gt,
-				challenge: data.challenge,
-				new_captcha: data.new_captcha,
-				product: "popup",
-				width: "100%",
-				offline: !data.success
-			}, handlerEmbed);
+			if(data.version == 1){
+				initGeetest4({
+					captchaId: data.gt,
+					product: 'popup',
+					protocol: 'https://',
+					riskType: 'ai',
+					hideSuccess: true,
+					nativeButton: {width: '100%'}
+				}, handlerEmbed);
+			}else{
+				initGeetest({
+					gt: data.gt,
+					challenge: data.challenge,
+					new_captcha: data.new_captcha,
+					product: "popup",
+					width: "100%",
+					offline: !data.success,
+				}, handlerEmbed);
+			}
 		}
 	});
 	}

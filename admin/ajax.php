@@ -174,6 +174,24 @@ case 'article_upload':
 	}
 break;
 
+case 'testproxy':
+	$conf['proxy_server'] = trim($_POST['proxy_server']);
+	$conf['proxy_port'] = $_POST['proxy_port'];
+	$conf['proxy_user'] = trim($_POST['proxy_user']);
+	$conf['proxy_pwd'] = trim($_POST['proxy_pwd']);
+	$conf['proxy_type'] = $_POST['proxy_type'];
+	try{
+		check_proxy('https://dl.amh.sh/ip.htm');
+	}catch(Exception $e){
+		try{
+			check_proxy('https://myip.ipip.net/');
+		}catch(Exception $e){
+			exit('{"code":-1,"msg":"'.$e->getMessage().'"}');
+		}
+	}
+	exit('{"code":0}');
+break;
+
 default:
 	exit('{"code":-4,"msg":"No Act"}');
 break;

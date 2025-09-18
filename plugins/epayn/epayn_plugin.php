@@ -156,7 +156,7 @@ class epayn_plugin
 			return ['type'=>'jump','url'=>$url];
 		}elseif($method == 'html'){
 			return ['type'=>'html','data'=>$url];
-		}elseif($method == 'scheme'){
+		}elseif($method == 'urlscheme'){
 			return ['type'=>'scheme','page'=>'wxpay_mini','url'=>$url];
 		}else{
 			if(checkwechat()){
@@ -250,9 +250,11 @@ class epayn_plugin
 			//支付人账号
 			$buyer = $_GET['buyer'];
 
+			$api_trade_no = $_GET['api_trade_no'];
+
 			if ($_GET['trade_status'] == 'TRADE_SUCCESS') {
 				if($out_trade_no == TRADE_NO && round($money,2)==round($order['realmoney'],2)){
-					processNotify($order, $trade_no, $buyer);
+					processNotify($order, $trade_no, $buyer, $api_trade_no);
 				}
 			}
 			return ['type'=>'html','data'=>'success'];
@@ -286,9 +288,11 @@ class epayn_plugin
 			//支付人账号
 			$buyer = $_GET['buyer'];
 
+			$api_trade_no = $_GET['api_trade_no'];
+
 			if($_GET['trade_status'] == 'TRADE_SUCCESS') {
 				if ($out_trade_no == TRADE_NO && round($money, 2)==round($order['realmoney'], 2)) {
-					processReturn($order, $trade_no, $buyer);
+					processReturn($order, $trade_no, $buyer, $api_trade_no);
 				}else{
 					return ['type'=>'error','msg'=>'订单信息校验失败'];
 				}
@@ -337,7 +341,11 @@ class epayn_plugin
 		$epay = new EpayCore($epay_config);
 		try{
 			$result = $epay->execute('api/transfer/submit', $params);
-			return ['code'=>0, 'status'=>$result['status'], 'orderid'=>$result['out_biz_no'], 'paydate'=>$result['paydate']];
+			if(isset($result['jumpurl'])){
+				return ['code'=>0, 'status'=>$result['status'], 'orderid'=>$result['out_biz_no'], 'paydate'=>$result['paydate'], 'wxpackage'=>$result['jumpurl']];
+			}else{
+				return ['code'=>0, 'status'=>$result['status'], 'orderid'=>$result['out_biz_no'], 'paydate'=>$result['paydate']];
+			}
 		}catch(Exception $e){
 			return ['code'=>-1, 'msg'=>$e->getMessage()];
 		}

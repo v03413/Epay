@@ -1,17 +1,7 @@
 <?php
 error_reporting(0);
+define('DB_VERSION', '2052');
 require '../config.php';
-
-function random($length, $numeric = 0) {
-	$seed = base_convert(md5(microtime().$_SERVER['DOCUMENT_ROOT']), 16, $numeric ? 10 : 35);
-	$seed = $numeric ? (str_replace('0', '', $seed).'012340567890') : ($seed.'zZ'.strtoupper($seed));
-	$hash = '';
-	$max = strlen($seed) - 1;
-	for($i = 0; $i < $length; $i++) {
-		$hash .= $seed[mt_rand(0, $max)];
-	}
-	return $hash;
-}
 
 @header('Content-Type: text/html; charset=UTF-8');
 
@@ -31,19 +21,19 @@ if($rs = $db->query("SELECT v FROM pay_config WHERE k='version'")){
 	$version = $rs->fetchColumn();
 }
 
-if($version<2038){
-	$sqls = file_get_contents('update2.sql');
-	$sqls=explode(';', $sqls);
-	$sqls[]="UPDATE `pre_config` SET `v` = '2038' where `k` = 'version'";
-}elseif($version<2001){
-	$sqls = file_get_contents('update.sql');
-	$sqls=explode(';', $sqls);
-	$sqls[]="INSERT INTO `pay_config` VALUES ('syskey', '".random(32)."')";
-	$sqls[]="INSERT INTO `pay_config` VALUES ('build', '".$date."')";
-	$sqls[]="INSERT INTO `pay_config` VALUES ('cronkey', '".rand(111111,999999)."')";
-	$sqls[]="UPDATE `pay_config` SET `v` = '2001' where `k` = 'version'";
-}else{
+if($version==DB_VERSION){
 	exit('你的网站已经升级到最新版本了');
+}elseif($version<2044){
+	$sqls = file_get_contents('update2.sql');
+	$sqls .= file_get_contents('update3.sql');
+	$sqls=explode(';', $sqls);
+	$sqls[]="UPDATE `pre_config` SET `v` = '".DB_VERSION."' where `k` = 'version'";
+}elseif($version<DB_VERSION){
+	$sqls = file_get_contents('update3.sql');
+	$sqls=explode(';', $sqls);
+	$sqls[]="UPDATE `pre_config` SET `v` = '".DB_VERSION."' where `k` = 'version'";
+}else{
+	exit('数据库不兼容，请重新安装！');
 }
 $sqls[]="UPDATE `pre_cache` SET `v` = '' where `k` = 'config'";
 $success=0;$error=0;$errorMsg=null;

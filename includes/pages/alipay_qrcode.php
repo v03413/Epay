@@ -23,7 +23,7 @@ if(!defined('IN_PLUGIN'))exit();
 <div class="mod-ct">
 <div class="order">
 </div>
-<div class="amount">￥<?php echo $order['realmoney']?></div>
+<div class="amount">¥<?php echo $order['realmoney']?></div>
 <div class="qr-image" id="qrcode">
 </div>
 <div class="open_app" style="display: none;">
@@ -54,7 +54,7 @@ if(!defined('IN_PLUGIN'))exit();
 </div>
 </div>
 <script src="<?php echo $cdnpublic?>jquery/1.12.4/jquery.min.js"></script>
-<script src="<?php echo $cdnpublic?>layer/3.1.1/layer.min.js"></script>
+<script src="<?php echo $cdnpublic?>layer/3.1.1/layer.js"></script>
 <script src="<?php echo $cdnpublic?>jquery.qrcode/1.0/jquery.qrcode.min.js"></script>
 <script>
 	var code_url = '<?php echo $code_url?>';
@@ -152,7 +152,7 @@ if(!defined('IN_PLUGIN'))exit();
                 $('.btn-open-app').attr('href', 'javascript:wx_open()');
             }else{
                 $('.btn-open-app').attr('href', url_scheme)
-                if(navigator.userAgent.indexOf('EdgA/')==-1){
+                if(navigator.userAgent.indexOf('EdgA/')==-1 && $(window).height() > $(window).width()){
                     setTimeout(window.location.href = url_scheme, 1000);
                 }
             }

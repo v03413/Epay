@@ -39,9 +39,9 @@ if($islogin==1){}else exit("<script language='javascript'>window.location.href='
 	  </table>
     </div>
   </div>
-<script src="<?php echo $cdnpublic?>layer/3.1.1/layer.min.js"></script>
-<script src="<?php echo $cdnpublic?>bootstrap-datepicker/1.9.0/js/bootstrap-datepicker.min.js"></script>
-<script src="<?php echo $cdnpublic?>bootstrap-datepicker/1.9.0/locales/bootstrap-datepicker.zh-CN.min.js"></script>
+<script src="<?php echo $cdnpublic?>layer/3.1.1/layer.js"></script>
+<script src="<?php echo $cdnpublic?>bootstrap-datepicker/1.10.0/js/bootstrap-datepicker.min.js"></script>
+<script src="<?php echo $cdnpublic?>bootstrap-datepicker/1.10.0/locales/bootstrap-datepicker.zh-CN.min.js"></script>
 <script src="../assets/js/bootstrap-table.min.js"></script>
 <script src="../assets/js/bootstrap-table-page-jump-to.min.js"></script>
 <script src="../assets/js/custom.js"></script>
@@ -82,7 +82,13 @@ function showTable(data){
 				title: item,
 				sortable: true,
 				formatter: function(value, row, index) {
-					return value>0?'<a href="./ulist.php?column=uid&value='+value+'" target="_blank">'+value+'</a>':'管理员';
+					if(value == 0){
+						return '管理员';
+					}else if(value>0){
+						return '<a href="./ulist.php?column=uid&value='+value+'" target="_blank">'+value+'</a>';
+					}else{
+						return value;
+					}
 				}
 			});
 		}else if(index == 'name'){

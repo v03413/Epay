@@ -75,13 +75,13 @@ class alipayd_plugin
 		if($isMobile && in_array('2',$channel['apptype'])){
 			if($conf['alipay_wappaylogin']==1){
 				if($isAlipay){
-					return ['type'=>'jump','url'=>'/pay/submitwap/'.TRADE_NO.'/'];
+					return ['type'=>'jump','url'=>'/pay/submitwap/'.TRADE_NO.'/?d=1'];
 				}else{
 					return ['type'=>'jump','url'=>'/pay/qrcode/'.TRADE_NO.'/'];
 				}
 			}
 			if(self::isCombinePay($order['realmoney'])){
-				return ['type'=>'jump','url'=>'/pay/submitwap/'.TRADE_NO.'/'];
+				return ['type'=>'jump','url'=>'/pay/submitwap/'.TRADE_NO.'/?d=1'];
 			}
 			$alipay_config = require(PAY_ROOT.'inc/config.php');
 			$alipay_config['notify_url'] = $conf['localurl'].'pay/notify/'.TRADE_NO.'/';
@@ -124,12 +124,12 @@ class alipayd_plugin
 
 			return ['type'=>'html','data'=>$html];
 		}elseif(in_array('6',$channel['apptype'])){
-			if($conf['alipay_wappaylogin']==1 && !$isAlipay){
+			if($conf['alipay_wappaylogin']==1 && !$isAlipay || $isMobile && !$isAlipay){
 				return ['type'=>'jump','url'=>'/pay/qrcode/'.TRADE_NO.'/'];
 			}
 			return ['type'=>'jump','url'=>'/pay/apppay/'.TRADE_NO.'/?d=1'];
 		}elseif(in_array('7',$channel['apptype'])){
-			return ['type'=>'jump','url'=>'/pay/jsapipay/'.TRADE_NO.'/?d=1'];
+			return ['type'=>'jump','url'=>'/pay/minipay/'.TRADE_NO.'/?d=1'];
 		}elseif(in_array('5',$channel['apptype'])){
 			if($conf['alipay_wappaylogin']==1 && !$isAlipay){
 				return ['type'=>'jump','url'=>'/pay/qrcode/'.TRADE_NO.'/'];
@@ -243,13 +243,17 @@ class alipayd_plugin
 		$alipay_config = require(PAY_ROOT.'inc/config.php');
 
 		if($conf['alipay_wappaylogin']==1 && checkalipay()){
-			[$user_type, $user_id] = self::oauth($alipay_config);
+			[$user_type, $user_id] = alipay_oauth($alipay_config);
 			$blocks = checkBlockUser($user_id, TRADE_NO);
 			if($blocks) return $blocks;
 		}
 
 		$alipay_config['notify_url'] = $conf['localurl'].'pay/notify/'.TRADE_NO.'/';
-		$alipay_config['return_url'] = $siteurl.'pay/return/'.TRADE_NO.'/';
+		if($_GET['d']=='1'){
+			$alipay_config['return_url'] = $siteurl.'pay/return/'.TRADE_NO.'/';
+		}else{
+			$alipay_config['return_url'] = $siteurl.'pay/ok/'.TRADE_NO.'/';
+		}
 		$bizContent = [
 			'out_trade_no' => TRADE_NO,
 			'total_amount' => $order['realmoney'],
@@ -260,13 +264,13 @@ class alipayd_plugin
 			$aop = new \Alipay\AlipayTradeService($alipay_config);
 			if(self::isCombinePay($order['realmoney'])){
 				$bizContent['product_code'] = 'QUICK_WAP_WAY';
-				$bizContent = self::combineOrderParams($bizContent);
+				$bizContent = self::combineOrderParams($bizContent, $sub_orders);
 				$result = $aop->mergePrecreatePay($bizContent);
 				$bizContent = [
 					'pre_order_no' => $result['pre_order_no']
 				];
 				$html = $aop->wapMergePay($bizContent);
-				\lib\Payment::updateOrderCombine(TRADE_NO);
+				\lib\Payment::updateOrderCombine(TRADE_NO, $sub_orders);
 			}else{
 				$aop->directPayParams($bizContent);
 				$html = $aop->wapPay($bizContent);
@@ -280,9 +284,12 @@ class alipayd_plugin
 
 	//扫码支付
 	static public function qrcode(){
-		global $siteurl, $channel, $order, $ordername, $conf, $clientip;
+		global $siteurl, $channel, $order, $ordername, $conf, $clientip, $mdevice;
 		if(!in_array('3',$channel['apptype']) && in_array('2',$channel['apptype'])){
 			$code_url = $siteurl.'pay/submitwap/'.TRADE_NO.'/';
+			if(!empty($conf['localurl_alipay']) && !strpos($conf['localurl_alipay'],$_SERVER['HTTP_HOST'])){
+				$code_url = $conf['localurl_alipay'].'pay/submitwap/'.TRADE_NO.'/';
+			}
 		}elseif(!in_array('3',$channel['apptype']) && in_array('4',$channel['apptype'])){
 			$code_url = $siteurl.'pay/jspay/'.TRADE_NO.'/';
 			if(!empty($conf['localurl_alipay']) && !strpos($conf['localurl_alipay'],$_SERVER['HTTP_HOST'])){
@@ -290,34 +297,50 @@ class alipayd_plugin
 			}
 		}elseif(!in_array('3',$channel['apptype']) && in_array('6',$channel['apptype'])){
 			$code_url = $siteurl.'pay/apppay/'.TRADE_NO.'/';
+			if(!empty($conf['localurl_alipay']) && !strpos($conf['localurl_alipay'],$_SERVER['HTTP_HOST'])){
+				$code_url = $conf['localurl_alipay'].'pay/apppay/'.TRADE_NO.'/';
+			}
 		}elseif(!in_array('3',$channel['apptype']) && in_array('7',$channel['apptype'])){
-			$code_url = $siteurl.'pay/jsapipay/'.TRADE_NO.'/';
+			$code_url = $siteurl.'pay/minipay/'.TRADE_NO.'/';
 		}elseif(!in_array('3',$channel['apptype']) && in_array('5',$channel['apptype'])){
 			$code_url = $siteurl.'pay/preauth/'.TRADE_NO.'/';
+			if(!empty($conf['localurl_alipay']) && !strpos($conf['localurl_alipay'],$_SERVER['HTTP_HOST'])){
+				$code_url = $conf['localurl_alipay'].'pay/preauth/'.TRADE_NO.'/';
+			}
 		}else{
-		
-		$alipay_config = require(PAY_ROOT.'inc/config.php');
-		$alipay_config['notify_url'] = $conf['localurl'].'pay/notify/'.TRADE_NO.'/';
-		$bizContent = [
-			'out_trade_no' => TRADE_NO,
-			'total_amount' => $order['realmoney'],
-			'subject' => $ordername
-		];
-		if(!in_array('3',$channel['apptype']) && in_array('8',$channel['apptype'])){
-			$bizContent['product_code'] = 'QR_CODE_OFFLINE';
-		}
-		$bizContent['business_params'] = ['mc_create_trade_ip' => $clientip];
-		try{
-			$aop = new \Alipay\AlipayTradeService($alipay_config);
-			$aop->directPayParams($bizContent);
-			$result = $aop->qrPay($bizContent);
-		}catch(Exception $e){
-			return ['type'=>'error','msg'=>'支付宝下单失败！'.$e->getMessage()];
-		}
-		$code_url = $result['qr_code'];
+
+			if($conf['alipay_qrpaylogin'] == 1){
+				if(checkalipay() || $mdevice=='alipay'){
+					[$user_type, $user_id] = alipay_oauth(require(PAY_ROOT.'inc/config.php'));
+					$blocks = checkBlockUser($user_id, TRADE_NO);
+					if($blocks) return $blocks;
+				}else{
+					$code_url = $siteurl.'pay/qrcode/'.TRADE_NO.'/';
+					return ['type'=>'qrcode','page'=>'alipay_qrcode','url'=>$code_url];
+				}
+			}
+
+			$alipay_config = require(PAY_ROOT.'inc/config.php');
+			$alipay_config['notify_url'] = $conf['localurl'].'pay/notify/'.TRADE_NO.'/';
+			$bizContent = [
+				'out_trade_no' => TRADE_NO,
+				'total_amount' => $order['realmoney'],
+				'subject' => $ordername
+			];
+			if(!in_array('3',$channel['apptype']) && in_array('8',$channel['apptype'])){
+				$bizContent['product_code'] = 'QR_CODE_OFFLINE';
+			}
+			$bizContent['business_params'] = ['mc_create_trade_ip' => $clientip];
+			try{
+				$aop = new \Alipay\AlipayTradeService($alipay_config);
+				$result = $aop->qrPay($bizContent);
+			}catch(Exception $e){
+				return ['type'=>'error','msg'=>'支付宝下单失败！'.$e->getMessage()];
+			}
+			$code_url = $result['qr_code'];
 
 		}
-		if(checkalipay() && $order['tid']==3){
+		if(checkalipay() || $mdevice=='alipay'){
 			return ['type'=>'jump','url'=>$code_url];
 		}else{
 			return ['type'=>'qrcode','page'=>'alipay_qrcode','url'=>$code_url];
@@ -331,7 +354,7 @@ class alipayd_plugin
 		$alipay_config = require(PAY_ROOT.'inc/config.php');
 
 		if($conf['alipay_wappaylogin']==1 && checkalipay()){
-			[$user_type, $user_id] = self::oauth($alipay_config);
+			[$user_type, $user_id] = alipay_oauth($alipay_config);
 			$blocks = checkBlockUser($user_id, TRADE_NO);
 			if($blocks) return $blocks;
 		}
@@ -347,13 +370,13 @@ class alipayd_plugin
 			$aop = new \Alipay\AlipayTradeService($alipay_config);
 			if(self::isCombinePay($order['realmoney'])){
 				$bizContent['product_code'] = 'QUICK_MSECURITY_PAY';
-				$bizContent = self::combineOrderParams($bizContent);
+				$bizContent = self::combineOrderParams($bizContent, $sub_orders);
 				$result = $aop->mergePrecreatePay($bizContent);
 				$bizContent = [
 					'pre_order_no' => $result['pre_order_no']
 				];
 				$result = $aop->appMergePay($bizContent);
-				\lib\Payment::updateOrderCombine(TRADE_NO);
+				\lib\Payment::updateOrderCombine(TRADE_NO, $sub_orders);
 			}else{
 				$aop->directPayParams($bizContent);
 				$result = $aop->appPay($bizContent);
@@ -380,7 +403,7 @@ class alipayd_plugin
 		$alipay_config = require(PAY_ROOT.'inc/config.php');
 
 		if($conf['alipay_wappaylogin']==1 && checkalipay()){
-			[$user_type, $user_id] = self::oauth($alipay_config);
+			[$user_type, $user_id] = alipay_oauth($alipay_config);
 			$blocks = checkBlockUser($user_id, TRADE_NO);
 			if($blocks) return $blocks;
 		}
@@ -420,7 +443,7 @@ class alipayd_plugin
 			$user_id = $order['sub_openid'];
 			$user_type = is_numeric($user_id) && substr($user_id, 0, 4) == '2088' ? 'userid' : 'openid';
 		}else{
-			[$user_type, $user_id] = self::oauth($alipay_config);
+			[$user_type, $user_id] = alipay_oauth($alipay_config);
 		}
 		
 		$blocks = checkBlockUser($user_id, TRADE_NO);
@@ -462,12 +485,8 @@ class alipayd_plugin
 	static public function jsapipay(){
 		global $siteurl, $channel, $order, $ordername, $conf, $clientip, $method;
 
-		if(!empty($order['sub_openid'])){
-			$user_id = $order['sub_openid'];
-			$user_type = is_numeric($user_id) && substr($user_id, 0, 4) == '2088' ? 'userid' : 'openid';
-		}else{
-			[$user_type, $user_id] = get_alipay_userid();
-		}
+		$user_id = $order['sub_openid'];
+		$user_type = is_numeric($user_id) && substr($user_id, 0, 4) == '2088' ? 'userid' : 'openid';
 		
 		$blocks = checkBlockUser($user_id, TRADE_NO);
 		if($blocks) return $blocks;
@@ -491,10 +510,10 @@ class alipayd_plugin
 			$aop = new \Alipay\AlipayTradeService($alipay_config);
 			if(self::isCombinePay($order['realmoney'])){
 				$bizContent['product_code'] = 'QUICK_MSECURITY_PAY';
-				$bizContent = self::combineOrderParams($bizContent);
+				$bizContent = self::combineOrderParams($bizContent, $sub_orders);
 				$result = $aop->mergeCreate($bizContent);
 				$alipay_trade_no = $result['merge_no'];
-				\lib\Payment::updateOrderCombine(TRADE_NO);
+				\lib\Payment::updateOrderCombine(TRADE_NO, $sub_orders);
 			}else{
 				$aop->directPayParams($bizContent);
 				$result = $aop->jsPay($bizContent);
@@ -504,44 +523,71 @@ class alipayd_plugin
 			return ['type'=>'error','msg'=>'支付宝下单失败！'.$e->getMessage()];
 		}
 		$alipay_trade_no = $result['trade_no'];
-		if($method == 'jsapi'){
-			return ['type'=>'jsapi','data'=>$alipay_trade_no];
+		return ['type'=>'jsapi','data'=>$alipay_trade_no];
+	}
+
+	//支付宝小程序支付
+	static public function alipaymini(){
+		global $siteurl, $channel, $order, $ordername, $conf, $clientip;
+		
+		$auth_code = isset($_GET['auth_code'])?trim($_GET['auth_code']):exit('{"code":-1,"msg":"auth_code不能为空"}');
+
+		$alipay_config = require(PAY_ROOT.'inc/config.php');
+		$alipay_config['notify_url'] = $conf['localurl'].'pay/notify/'.TRADE_NO.'/';
+
+		try{
+			[$app_id, $user_type, $user_id] = alipay_mini_oauth($auth_code, $alipay_config);
+		}catch(Exception $e){
+			exit(json_encode(['code'=>-1, 'msg'=>$e->getMessage()]));
 		}
+	
+		$blocks = checkBlockUser($user_id, TRADE_NO);
+		if($blocks)exit('{"code":-1,"msg":"'.$blocks['msg'].'"}');
+
+		$bizContent = [
+			'out_trade_no' => TRADE_NO,
+			'total_amount' => $order['realmoney'],
+			'subject' => $ordername,
+			'product_code' => 'JSAPI_PAY',
+			'op_app_id' => $app_id
+		];
+		if($user_type == 'openid'){
+			$bizContent['buyer_open_id'] = $user_id;
+		}else{
+			$bizContent['buyer_id'] = $user_id;
+		}
+		$bizContent['business_params'] = ['mc_create_trade_ip' => $clientip];
+		try{
+			$aop = new \Alipay\AlipayTradeService($alipay_config);
+			if(self::isCombinePay($order['realmoney'])){
+				$bizContent['product_code'] = 'QUICK_MSECURITY_PAY';
+				$bizContent = self::combineOrderParams($bizContent, $sub_orders);
+				$result = $aop->mergeCreate($bizContent);
+				$alipay_trade_no = $result['merge_no'];
+				\lib\Payment::updateOrderCombine(TRADE_NO, $sub_orders);
+			}else{
+				$aop->directPayParams($bizContent);
+				$result = $aop->jsPay($bizContent);
+				$alipay_trade_no = $result['trade_no'];
+			}
+		}catch(Exception $e){
+			exit(json_encode(['code'=>-1, 'msg'=>'支付宝下单失败！'.$e->getMessage()]));
+		}
+		exit(json_encode(['code'=>0, 'data'=>$alipay_trade_no]));
+	}
+
+	//H5跳转小程序支付
+	static public function minipay(){
+		global $siteurl, $channel, $conf;
+
+		$code_url = alipaymini_jump_scheme(TRADE_NO, $channel['appid']);
 
 		if($_GET['d']=='1'){
 			$redirect_url='data.backurl';
 		}else{
 			$redirect_url='\'/pay/ok/'.TRADE_NO.'/\'';
 		}
-		return ['type'=>'page','page'=>'alipay_jspay','data'=>['alipay_trade_no'=>$alipay_trade_no, 'redirect_url'=>$redirect_url]];
-	}
-
-	//聚合收款码接口
-	static public function jsapi($type,$money,$name,$openid){
-		global $siteurl, $channel, $conf, $clientip;
-
-		$alipay_config = require(PAY_ROOT.'inc/config.php');
-		$alipay_config['notify_url'] = $conf['localurl'].'pay/notify/'.TRADE_NO.'/';
-		$bizContent = [
-			'out_trade_no' => TRADE_NO,
-			'total_amount' => $money,
-			'subject' => $name
-		];
-		if(is_numeric($openid) && substr($openid, 0, 4) == '2088'){
-			$bizContent['buyer_id'] = $openid;
-		}else{
-			$bizContent['buyer_open_id'] = $openid;
-		}
-		$bizContent['business_params'] = ['mc_create_trade_ip' => $clientip];
-		try{
-			$aop = new \Alipay\AlipayTradeService($alipay_config);
-			$aop->directPayParams($bizContent);
-			$result = $aop->jsPay($bizContent);
-		}catch(Exception $e){
-			throw new Exception('支付宝下单失败！'.$e->getMessage());
-		}
-		$alipay_trade_no = $result['trade_no'];
-		return $alipay_trade_no;
+		return ['type'=>'page','page'=>'alipay_h5','data'=>['code_url'=>$code_url, 'redirect_url'=>$redirect_url]];
 	}
 
 	//支付成功页面
@@ -551,7 +597,7 @@ class alipayd_plugin
 
 	//异步回调
 	static public function notify(){
-		global $channel, $order;
+		global $channel, $order, $conf;
 
 		if($order['combine']){
 			return self::combine_notify();
@@ -581,17 +627,23 @@ class alipayd_plugin
 			}
 			else if ($_POST['trade_status'] == 'TRADE_SUCCESS') {
 				if($out_trade_no == TRADE_NO && round($total_amount,2)==round($order['realmoney'],2)){
-					usleep(300000);
-					try{
-						$aop->settle_confirm($trade_no, $order['realmoney']);
-						$order['settle'] = 2;
-					}catch(Exception $e){
-						$errmsg = $e->getMessage();
-						if(strpos($errmsg, 'ALREADY_CONFIRM_SETTLE')){
+					if($conf['direct_settle_time'] > 0 && $order['profits'] == 0){
+						$order['settle'] = 1;
+					}else{
+						usleep(300000);
+						try{
+							$freeze = $conf['direct_settle_time'] > 0 && $order['profits'] > 0;
+							$aop->settle_confirm($trade_no, $order['realmoney'], $freeze);
 							$order['settle'] = 2;
-						}else{
-							$aop->writeLog('settle_confirm:'.$errmsg);
-							$order['settle'] = 3;
+						}catch(Exception $e){
+							$errmsg = $e->getMessage();
+							if(strpos($errmsg, 'ALREADY_CONFIRM_SETTLE')){
+								$order['settle'] = 2;
+							}else{
+								$aop->writeLog('settle_confirm:'.$errmsg);
+								$order['settle'] = 3;
+								\lib\Payment::alipayd_settle_fail($channel, $order, $errmsg);
+							}
 						}
 					}
 					processNotify($order, $trade_no, $buyer_id);
@@ -715,41 +767,79 @@ class alipayd_plugin
 		global $channel;
 		if(empty($order))exit();
 
-		$leftmoney = $order['refundmoney'];
-		if($order['refundmoney']>$order['realmoney']){
-			return ['code'=>-1, 'msg'=>'退款金额不能大于订单金额'];
-		}
-
-		if(!$order['ext']) return ['code'=>-1, 'msg'=>'子单支付结果数据不存在'];
-		$sub_orders = unserialize($order['ext']);
+		$sub_orders = \lib\Payment::getSubOrders($order['trade_no']);
+		if(empty($sub_orders)) return ['code'=>-1, 'msg'=>'子订单数据不存在'];
 	
 		$alipay_config = require(PAY_ROOT.'inc/config.php');
 		$aop = new \Alipay\AlipayTradeService($alipay_config);
 
 		//循环退款
-		$i = 1;
-		$success = 0;
+		$refundmoney = $order['refundmoney'];
 		foreach($sub_orders as $sub_order){
-			$money = $sub_order['total_amount'];
-			if($order['refundmoney']<$order['realmoney']){
-				if($leftmoney-$money<0) $money = $leftmoney;
+			if($sub_order['status']==2 && (empty($sub_order['refundmoney']) || $sub_order['refundmoney']>=$sub_order['money'])) continue;
+			$money = $sub_order['money'];
+			if($sub_order['status']==2) $money = round($sub_order['money'] - $sub_order['refundmoney'], 2);
+			if($money > $refundmoney){
+				$money = $refundmoney;
 			}
+			$refund_no = date("YmdHis").rand(11111,99999);
 			$bizContent = [
-				'trade_no' => $sub_order['trade_no'],
+				'trade_no' => $sub_order['api_trade_no'],
 				'refund_amount' => $money,
-				'out_request_no' => $order['refund_no'].$i
+				'out_request_no' => $refund_no
 			];
 			try{
 				$aop->refund($bizContent);
-				$success++;
 			}catch(Exception $e){
 				return ['code'=>-1, 'msg'=>$e->getMessage()];
 			}
-			$i++;
-			$leftmoney=round($leftmoney-$money, 2);
-			if($leftmoney<=0)break;
+			$sub_refundmoney = $sub_order['refundmoney'] ? round($sub_order['refundmoney'] + $money, 2) : $money;
+			\lib\Payment::refundSubOrder($sub_order['sub_trade_no'], $sub_refundmoney);
+			$refundmoney = round($refundmoney - $money, 2);
+			if($refundmoney<=0)break;
 		}
 		return ['code'=>0];
+	}
+
+	//关闭订单
+	static public function close($order){
+		global $channel;
+		if(empty($order))exit();
+
+		$alipay_config = require(PAY_ROOT.'inc/config.php');
+		$bizContent = [
+			'out_trade_no' => $order['trade_no'],
+		];
+		try{
+			$aop = new \Alipay\AlipayTradeService($alipay_config);
+			$aop->close($bizContent);
+			return  ['code'=>0];
+		}catch(Exception $e){
+			return ['code'=>-1, 'msg'=>$e->getMessage()];
+		}
+	}
+
+	//合单支付关闭订单
+	static public function close_combine($order){
+		global $channel;
+		if(empty($order))exit();
+
+		$sub_orders = \lib\Payment::getSubOrders($order['trade_no']);
+		if(empty($sub_orders)) return ['code'=>-1, 'msg'=>'子订单数据不存在'];
+
+		$alipay_config = require(PAY_ROOT.'inc/config.php');
+		$aop = new \Alipay\AlipayTradeService($alipay_config);
+		foreach($sub_orders as $sub_order){
+			$bizContent = [
+				'out_trade_no' => $sub_order['trade_no'],
+			];
+			try{
+				$aop->close($bizContent);
+			}catch(Exception $e){
+				return ['code'=>-1, 'msg'=>$e->getMessage()];
+			}
+		}
+		return  ['code'=>0];
 	}
 
 	//支付宝应用网关
@@ -795,28 +885,6 @@ class alipayd_plugin
 		}
 	}
 
-	static private function oauth($alipay_config){
-		$redirect_uri = (is_https() ? 'https://' : 'http://').$_SERVER['HTTP_HOST'].$_SERVER['REQUEST_URI'];
-		try{
-			$oauth = new \Alipay\AlipayOauthService($alipay_config);
-			if(isset($_GET['auth_code'])){
-				$result = $oauth->getToken($_GET['auth_code']);
-				if(!empty($result['user_id'])){
-					$openid = $result['user_id'];
-					$openid_type = 'userid';
-				}else{
-					$openid = $result['open_id'];
-					$openid_type = 'openid';
-				}
-			}else{
-				$oauth->oauth($redirect_uri);
-			}
-		}catch(Exception $e){
-			throw new Exception('支付宝快捷登录失败！'.$e->getMessage());
-		}
-		return [$openid_type, $openid];
-	}
-
 	//判断是否支持合单支付
 	static private function isCombinePay($money){
 		global $conf;
@@ -826,7 +894,7 @@ class alipayd_plugin
 	}
 
 	//合单支付参数
-	static private function combineOrderParams($bizContent){
+	static private function combineOrderParams($bizContent, &$sub_orders){
 		global $channel, $conf;
 		
 		$sub_mchid = $channel['appmchid'];
@@ -858,6 +926,7 @@ class alipayd_plugin
 		}
 
 		$order_details = [];
+		$sub_orders = [];
 		$i = 1;
         foreach($submoneys as $money){
 			$order_detail = [
@@ -882,6 +951,7 @@ class alipayd_plugin
 			if(isset($bizContent['buyer_id'])) $order_detail['buyer_id'] = $bizContent['buyer_id'];
 			if(isset($bizContent['buyer_open_id'])) $order_detail['buyer_open_id'] = $bizContent['buyer_open_id'];
             $order_details[] = $order_detail;
+			$sub_orders[] = ['sub_trade_no'=>$order_detail['out_trade_no'], 'money'=>$order_detail['total_amount']];
             $i++;
         }
 		$bizContent = [
@@ -892,7 +962,7 @@ class alipayd_plugin
 	}
 
 	static private function combine_notify(){
-		global $channel, $order;
+		global $channel, $order, $conf;
 
 		$alipay_config = require(PAY_ROOT.'inc/config.php');
 		$aop = new \Alipay\AlipayService($alipay_config);
@@ -905,27 +975,42 @@ class alipayd_plugin
 			$order_detail_results = json_decode($_POST['order_detail_results'], true);
 
 			if($_POST['merge_pay_status'] == 'FINISHED' && $out_trade_no == TRADE_NO){
-				usleep(300000);
-				$failnum = 0;
-				$aop = new \Alipay\AlipayTradeService($alipay_config);
-				\lib\Payment::lockPayData(TRADE_NO, function() use($aop, $order_detail_results) {
-					global $failnum;
-					$sub_orders = [];
+
+				$sub_orders = [];
+				foreach($order_detail_results as $detail){
+					$sub_orders[] = ['sub_trade_no'=>$detail['out_trade_no'], 'api_trade_no'=>$detail['trade_no'], 'money'=>$detail['total_amount']];
+				}
+				\lib\Payment::processSubOrders(TRADE_NO, $sub_orders);
+
+				if($conf['direct_settle_time'] > 0 && $order['profits'] == 0){
+					$order['settle'] = 1;
+				}else{
+					usleep(300000);
+					$freeze = $conf['direct_settle_time'] > 0 && $order['profits'] > 0;
+					$failnum = 0;
+					$aop = new \Alipay\AlipayTradeService($alipay_config);
 					foreach($order_detail_results as $detail){
 						$settle = 0;
 						try{
-							$aop->settle_confirm($detail['trade_no'], $detail['total_amount']);
+							$aop->settle_confirm($detail['trade_no'], $detail['total_amount'], $freeze);
 							$settle = 1;
 						}catch(Exception $e){
-							$failnum++;
-							$aop->writeLog('settle_confirm:'.$e->getMessage());
+							$errmsg = $e->getMessage();
+							if(strpos($errmsg, 'ALREADY_CONFIRM_SETTLE')!==false){
+								$settle = 1;
+							}else{
+								$failnum++;
+								$aop->writeLog('settle_confirm:'.$errmsg);
+							}
 						}
-						$sub_orders[] = ['out_trade_no'=>$detail['out_trade_no'], 'trade_no'=>$detail['trade_no'], 'total_amount'=>$detail['total_amount'], 'settle'=>$settle];
+						if($settle == 1) \lib\Payment::updateSubOrderSettle($detail['out_trade_no'], 1);
 					}
-					return $sub_orders;
-				});
-
-				$order['settle'] = $failnum > 0 ? 3 : 2;
+					$order['settle'] = $failnum > 0 ? 3 : 2;
+					if($failnum > 0){
+						\lib\Payment::alipayd_settle_fail($channel, $order, $errmsg);
+					}
+				}
+				
 				processNotify($order, $out_trade_no, $buyer_id);
 			}
 			return ['type'=>'html','data'=>'success'];

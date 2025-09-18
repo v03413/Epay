@@ -9,12 +9,11 @@ if(!defined('IN_CRONLITE'))exit();
   <title><?php echo $conf['title']?></title>
   <meta name="keywords" content="<?php echo $conf['keywords']?>" />
   <meta name="description" content="<?php echo $conf['description']?>" />
-  <link rel="stylesheet" type="text/css" href="<?php echo $cdnpublic?>twitter-bootstrap/4.3.1/css/bootstrap.min.css" />
+  <link rel="stylesheet" type="text/css" href="<?php echo $cdnpublic?>twitter-bootstrap/4.6.2/css/bootstrap.min.css" />
   <link rel="stylesheet" type="text/css" href="<?php echo STATIC_ROOT?>css/magnific-popup.css">
   <link rel="stylesheet" type="text/css" href="<?php echo STATIC_ROOT?>css/owl.theme.css">
   <link rel="stylesheet" type="text/css" href="<?php echo STATIC_ROOT?>css/aos.css">
   <link rel="stylesheet" type="text/css" href="<?php echo STATIC_ROOT?>css/mobiriseicons.css">
-  <link rel="stylesheet" type="text/css" href="<?php echo $cdnpublic?>MaterialDesign-Webfont/1.9.33/css/materialdesignicons.min.css"/>
   <link rel="stylesheet" type="text/css" href="<?php echo STATIC_ROOT?>css/as.css">
 </head>
 <body>
@@ -23,7 +22,7 @@ if(!defined('IN_CRONLITE'))exit();
       <a class="navbar-brand logo" href=""><img class="header-logo-img" src="assets/img/logo.png" alt="<?php echo $conf['sitename']?>" /></a>
       <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbar-as"
       aria-controls="navbar-as" aria-expanded="false" aria-label="Toggle navigation">
-        <i class="mdi mdi-menu"></i>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" style="height:37px;width:28px"><path d="M3,6H21V8H3V6M3,11H21V13H3V11M3,16H21V18H3V16Z" /></svg>
       </button>
       <div class="collapse navbar-collapse" id="navbar-as">
         <ul class="navbar-nav mr-auto">
@@ -225,7 +224,7 @@ if(!defined('IN_CRONLITE'))exit();
               <i class="mbri-laptop text-white"></i>
             </div>
             <div class="features_details text-white">
-              <p class="text-white mb-0">商户结算总额：￥348511.89
+              <p class="text-white mb-0">商户结算总额：¥348511.89
               </p>
             </div>
           </div>
@@ -234,7 +233,7 @@ if(!defined('IN_CRONLITE'))exit();
               <i class="mbri-touch-swipe text-white"></i>
             </div>
             <div class="features_details text-white">
-              <p class="text-white mb-0">商户总计余额：￥65498.34
+              <p class="text-white mb-0">商户总计余额：¥65498.34
               </p>
             </div>
           </div>
@@ -331,7 +330,7 @@ if(!defined('IN_CRONLITE'))exit();
     </div>
   </footer>
   <script src="<?php echo $cdnpublic?>jquery/1.12.4/jquery.min.js"></script>
-  <script src="<?php echo $cdnpublic?>twitter-bootstrap/4.3.1/js/bootstrap.min.js"></script>
+  <script src="<?php echo $cdnpublic?>twitter-bootstrap/4.6.2/js/bootstrap.bundle.min.js"></script>
   <script src="<?php echo STATIC_ROOT?>js/owl.carousel.min.js"></script>
   <script src="<?php echo STATIC_ROOT?>js/aos.js"></script>
   <script src="<?php echo STATIC_ROOT?>js/typed.js"></script>

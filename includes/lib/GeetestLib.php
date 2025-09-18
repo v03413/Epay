@@ -58,7 +58,7 @@ class GeetestLib
         $challenge      = md5(uniqid(mt_rand(), true) . microtime());
         $result         = array(
             'success'   => 0,
-            'gt'        => $this->geetest_id,
+            'gt'        => !empty($this->geetest_id) ? $this->geetest_id : 'e10adc3949ba59abbe56e057f20f883e',
             'challenge' => $challenge,
             'new_captcha'=>true
         );
@@ -142,5 +142,53 @@ class GeetestLib
         }else{
             return false;
         }
+    }
+
+    public function gt4_validate($captcha_id, $lot_number, $pass_token, $gen_time, $captcha_output) {
+        if(!empty($this->geetest_id) && !empty($this->geetest_key)){
+            return $this->gt4_validate_api($captcha_id, $lot_number, $pass_token, $gen_time, $captcha_output);
+        }else{
+            return $this->gt4_validate_demo($captcha_id, $lot_number, $pass_token, $gen_time, $captcha_output);
+        }
+    }
+
+    private function gt4_validate_api($captcha_id, $lot_number, $pass_token, $gen_time, $captcha_output){
+        $url = 'http://gcaptcha4.geetest.com/validate?captcha_id='.$captcha_id;
+        $param = [
+            'lot_number' => $lot_number,
+            'pass_token' => $pass_token,
+            'gen_time' => $gen_time,
+            'captcha_output' => $captcha_output
+        ];
+        $param['sign_token'] = hash_hmac('sha256', $param['lot_number'], $this->geetest_key);
+        $data = get_curl($url, http_build_query($param));
+        $arr = json_decode($data, true);
+        if(isset($arr['status']) && $arr['status']=='success'){
+            if(isset($arr['result']) && $arr['result'] == 'success'){
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private function gt4_validate_demo($captcha_id, $lot_number, $pass_token, $gen_time, $captcha_output){
+        global $clientip;
+        $url = 'http://gt4.geetest.com/demov4/demo/login';
+        $param = [
+            'captcha_id' => $captcha_id,
+            'lot_number' => $lot_number,
+            'pass_token' => $pass_token,
+            'gen_time' => $gen_time,
+            'captcha_output' => $captcha_output
+        ];
+        $referer = 'http://gt4.geetest.com/demov4/invisible-bind-zh.html';
+        $httpheader[] = "X-Real-IP: ".$clientip;
+        $httpheader[] = "X-Forwarded-For: ".$clientip;
+        $data = get_curl($url.'?'.http_build_query($param),0,$referer,0,0,0,0,$httpheader);
+        $arr = json_decode($data, true);
+        if(isset($arr['result']) && $arr['result'] == 'success'){
+            return true;
+        }
+        return false;
     }
 }

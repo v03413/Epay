@@ -8,6 +8,8 @@ require_once 'YsepayResponse.php';
 class YsepayClient
 {
 
+    private $gatewayUrl = 'https://ysgate.ysepay.com';
+
     //服务商商户号
     private $partnerId;
 
@@ -29,8 +31,11 @@ class YsepayClient
     public function __construct($partnerId, $privateKeyPwd){
         $this->partnerId = $partnerId;
         $this->privateKeyPwd = $privateKeyPwd;
-        $this->businessgateCertPath = PAY_ROOT.'cert/businessgate.cer';
-        $this->privateCertPath = PAY_ROOT.'cert/client.pfx';
+        $this->businessgateCertPath = PLUGIN_ROOT.'ysepay/cert/businessgate.cer';
+        $this->privateCertPath = PLUGIN_ROOT.'ysepay/cert/client.pfx';
+        if(file_exists(PLUGIN_ROOT.'ysepay/cert/'.$partnerId.'.pfx')){
+            $this->privateCertPath = PLUGIN_ROOT.'ysepay/cert/'.$partnerId.'.pfx';
+        }
         if(!file_exists($this->businessgateCertPath)){
             throw new \Exception('银盛公钥证书文件businessgate.cer不存在');
         }
@@ -60,8 +65,18 @@ class YsepayClient
         $params['sign'] = $this->generateSign($params);
         $raw = $this->curl($url, $params);
         $response = new YsepayResponse($raw, $method);
-        $this->verifyResponse($response);
-        return $response;
+        
+        $result = $response->getData();
+        if (isset($result['code']) && $result['code'] == '10000') {
+            $this->verifyResponse($response);
+            return $result;
+        } elseif(isset($result['sub_code'])) {
+			throw new Exception('['.$result['sub_code'].']'.$result['sub_msg']);
+		} elseif(isset($result['msg'])) {
+			throw new Exception($result['msg']);
+		} else {
+			throw new Exception('系统异常，状态未知！');
+		}
     }
 
     //页面跳转支付
@@ -98,6 +113,62 @@ class YsepayClient
         return $html;
     }
 
+    //发起请求
+    public function request($path, $method, $version, $bizContent, $file = null){
+        $url = $this->gatewayUrl . $path;
+        $key = random(16);
+        $bizContent = json_encode($bizContent, JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE);
+        $bizContent = $this->aesEncrypt($bizContent, $key);
+        $params = [
+            'method' => $method,
+            'timeStamp' => date("Y-m-d H:i:s"),
+            'charset' => 'utf-8',
+            'reqId' => date("YmdHis").rand(1000, 9999),
+            'certId' => $this->partnerId,
+            'version' => $version,
+            'check' => $this->rsaPublicEncrypt($key),
+            'bizContent' => $bizContent,
+        ];
+        $params['sign'] = $this->rsa256PrivateSign($this->getSignContent($params));
+        if($file instanceof \CURLFile){
+            $params['file'] = $file;
+        }
+        $response = $this->curl($url, $params);
+        $result = json_decode(base64_decode($response), true);
+        if (isset($result['code']) && $result['code'] == '00000') {
+            if(!$this->rsa256PubilcVerify($this->getSignContent($result), $result['sign'])){
+                throw new Exception('返回结果验签失败');
+            }
+            if(!empty($result['subCode']) && $result['subCode'] != '0000') {
+                throw new Exception('['.$result['subCode'].']'.$result['subMsg']);
+            }
+            if(!empty($result['businessData'])){
+                $dec_data = $this->aesDecrypt($result['businessData'], $key);
+                if(!$dec_data){
+                    throw new Exception('业务响应参数解密失败');
+                }
+                return json_decode($dec_data, true);
+            }
+            return $result;
+        } elseif(isset($result['subMsg'])) {
+			throw new Exception('['.$result['subCode'].']'.$result['subMsg']);
+		} elseif(isset($result['msg'])) {
+			throw new Exception($result['msg']);
+		} else {
+			throw new Exception('系统异常，状态未知！');
+		}
+    }
+
+    private function aesEncrypt($data, $key){
+        $encData = openssl_encrypt($data, 'aes-128-ecb', $key, OPENSSL_PKCS1_PADDING);
+        return base64_encode($encData);
+    }
+
+    private function aesDecrypt($data, $key){
+        $decData = openssl_decrypt(base64_decode($data), 'aes-128-ecb', $key, OPENSSL_PKCS1_PADDING);
+        return $decData;
+    }
+
     //异步通知回调验签
     public function verify($params)
     {
@@ -108,6 +179,21 @@ class YsepayClient
         $data = $this->getSignContent($params);
         try {
             return $this->rsaPubilcVerify($data, $sign);
+        } catch (\Exception $ex) {
+            return false;
+        }
+    }
+
+    //异步通知回调验签
+    public function verify2($params)
+    {
+        if (!$params || !isset($params['sign'])) {
+            return false;
+        }
+        $sign = $params['sign'];
+        $data = $this->getSignContent($params);
+        try {
+            return $this->rsa256PubilcVerify($data, $sign);
         } catch (\Exception $ex) {
             return false;
         }
@@ -195,6 +281,30 @@ class YsepayClient
         return $result === 1;
     }
 
+    //私钥加签
+    private function rsa256PrivateSign($data)
+    {
+        $prikey = $this->getPrivateKey();
+        $result = openssl_sign($data, $sign, $prikey, OPENSSL_ALGO_SHA256);
+        if (!$result) throw new \Exception('sign error');
+        return base64_encode($sign);
+    }
+
+    //公钥验签
+    public function rsa256PubilcVerify($data, $sign)
+    {
+        $pubkey = $this->getPublicKey();
+        $result = openssl_verify($data, base64_decode($sign), $pubkey, OPENSSL_ALGO_SHA256);
+        return $result === 1;
+    }
+
+    private function rsaPublicEncrypt($data)
+    {
+        $pubkey = $this->getPublicKey();
+        $result = openssl_public_encrypt($data, $encrypted, $pubkey);
+        return base64_encode($encrypted);
+    }
+
     private function curl($url, $postFields = null)
     {
         $ch = curl_init();
@@ -208,7 +318,9 @@ class YsepayClient
         if (is_array($postFields) && 0 < count($postFields)) {
             $postMultipart = false;
             foreach ($postFields as &$value) {
-                if(substr($value, 0, 1) == '@' && class_exists('CURLFile')){
+                if($value instanceof \CURLFile){
+                    $postMultipart = true;
+                }elseif(substr($value, 0, 1) == '@'){
                     $postMultipart = true;
                     $file = substr($value, 1);
                     if(file_exists($file)){

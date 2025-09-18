@@ -16,6 +16,7 @@ $errmsg = null;
 if($out_trade_no){
 	$order = $DB->getRow("SELECT * FROM pre_order WHERE trade_no=:trade_no limit 1", [':trade_no'=>$out_trade_no]);
 	if(!$order)$order = $DB->getRow("SELECT * FROM pre_order WHERE api_trade_no=:trade_no limit 1", [':trade_no'=>$out_trade_no]);
+	if(!$order)$order = $DB->getRow("SELECT * FROM pre_order WHERE bill_mch_trade_no=:trade_no limit 1", [':trade_no'=>$out_trade_no]);
 	if($order){
 		$trade_no = $order['trade_no'];
 		$jump_url = $siteurl.'pay/return/'.$trade_no.'/';
@@ -68,7 +69,7 @@ parent.postMessage(postData,'https://payapp.weixin.qq.com');
     <div class="main">
         <div class="container">
             <div class="icons"><svg t="1704509605113" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="4373" xmlns:xlink="http://www.w3.org/1999/xlink" width="100%" height="100%"><path d="M512 896c-212.077 0-384-171.923-384-384s171.923-384 384-384 384 171.923 384 384-171.923 384-384 384z m0 64c247.424 0 448-200.576 448-448S759.424 64 512 64 64 264.576 64 512s200.576 448 448 448z" fill="#60b968" p-id="4374"></path><path d="M767.696 347.343a8 8 0 0 0-11.314 0L445.137 658.588 268.598 482.049a8 8 0 0 0-11.314 0l-33.941 33.941a8 8 0 0 0 0 11.314l197.99 197.99c0.973 0.973 1.993 1.87 3.053 2.692 12.572 10.837 31.57 10.293 43.496-1.634l333.755-333.754a8 8 0 0 0 0-11.314l-33.941-33.941z" fill="#60b968" p-id="4375"></path></svg></div>
-            <div class="text">￥<?php echo $order['money']?></div>
+            <div class="text">¥<?php echo $order['money']?></div>
             <div class="message">
                 <p>支付成功！请点击按钮返回商家页面</p>
             </div>

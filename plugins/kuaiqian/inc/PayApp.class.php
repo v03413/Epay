@@ -124,6 +124,37 @@ class PayApp
 		return json_encode($response_Final);
 	}
 
+	public function notifyProcessTransfer(&$result){
+		$json = file_get_contents('php://input');
+		$requestMessage = json_decode($json,true);
+		if(!$requestMessage) throw new Exception('no data');
+		//对返回body解密验签，拿到原文
+		$cryptoProcessor = new CryptoProcessor($this->merchat_key_path, $this->merchat_key_pwd, $this->platform_cert_path);
+		$signedData = $requestMessage['requestBody']['signedData'];
+		$envelopedData = $requestMessage['requestBody']['envelopedData'];
+		$salt = $requestMessage['head']['memberCode'] . '_' . $this->getMillisecond();
+		$request_Body = $cryptoProcessor->unseal($signedData,$envelopedData,$salt);
+		$result = ['head' => $requestMessage['head'], 'body' => json_decode($request_Body,true)];
+
+		$head = [
+			'version' => '1.0.0',
+			'messageType' => 'C1011',
+			'memberCode' => $requestMessage['head']['memberCode'],
+			'externalRefNumber' => $requestMessage['head']['externalRefNumber'],
+			'origMessageType' => $requestMessage['head']['origMessageType'],
+		];
+		$body = [
+			'isReceived' => '1'
+		];
+		//对明文body进行加密加签
+        $salt = $head['memberCode'] . '_' . $this->getMillisecond();
+        $body = json_encode($body,JSON_UNESCAPED_UNICODE);
+        $response_Body_Final = $cryptoProcessor->seal($body,$salt);
+        $response_Final['head'] = $head;
+        $response_Final['responseBody'] = $response_Body_Final;
+		return json_encode($response_Final);
+	}
+
 	//请求参数签名
 	public function generateSign($param){
 		$signstr = '';

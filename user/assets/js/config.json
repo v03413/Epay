@@ -1,4 +1,19 @@
 {
+    "default": {
+        "qrWidth": "380",
+        "qrHeight": "380",
+        "foreground": "#555",
+        "background": "#FFFFFF",
+        "imgWidth": 862,
+        "imgHeight": 1132,
+        "font": "60px '黑体'",
+        "fontColor": "#FFFFFF",
+        "recNameLeft": "",
+        "recNameTop": 210,
+        "qrLeft": 245,
+        "qrTop": 326,
+	"url": "./assets/img/qrcode.png"
+    },
     "dongxue": {
         "qrWidth": "364",
         "qrHeight": "364",

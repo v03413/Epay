@@ -29,11 +29,25 @@ class yeepay_plugin
 				'type' => 'input',
 				'note' => '留空则与发起方商户编号一致',
 			],
+			'appswitch' => [
+				'name' => '支付场景',
+				'type' => 'select',
+				'options' => [0=>'线上',1=>'线下'],
+			],
 		],
 		'select' => null,
+		'select_alipay' => [
+			'1' => '扫码支付',
+			'2' => 'JS支付',
+		],
+		'select_wxpay' => [
+			'1' => '扫码支付',
+			'2' => '公众号/小程序支付',
+			'3' => '托管支付',
+		],
 		'note' => '密钥需要选RSA格式的', //支付密钥填写说明
-		'bindwxmp' => false, //是否支持绑定微信公众号
-		'bindwxa' => false, //是否支持绑定微信小程序
+		'bindwxmp' => true, //是否支持绑定微信公众号
+		'bindwxa' => true, //是否支持绑定微信小程序
 	];
 
 	static public function submit(){
@@ -44,7 +58,7 @@ class yeepay_plugin
 		}elseif($order['typename']=='wxpay'){
 			if(checkwechat() && $channel['appwxmp']>0){
 				return ['type'=>'jump','url'=>'/pay/wxjspay/'.TRADE_NO.'/'];
-			}elseif(checkmobile()){
+			}elseif(checkmobile() && (in_array('3',$channel['apptype']) || $channel['appwxa']>0)){
 				return ['type'=>'jump','url'=>'/pay/wxwappay/'.TRADE_NO.'/'];
 			}else{
 				return ['type'=>'jump','url'=>'/pay/wxpay/'.TRADE_NO.'/'];
@@ -55,14 +69,30 @@ class yeepay_plugin
 	}
 
 	static public function mapi(){
-		global $siteurl, $channel, $order, $conf, $device, $mdevice;
+		global $siteurl, $channel, $order, $conf, $device, $mdevice, $method;
 
-		if($order['typename']=='alipay'){
+		if($method=='jsapi'){
+			if($order['typename']=='alipay'){
+				return self::alipayjs();
+			}elseif($order['typename']=='wxpay'){
+				return self::wxjspay();
+			}
+		}elseif($method == 'applet'){
+			return self::wxapppay();
+		}
+		elseif($method == 'app'){
+			if($order['typename']=='alipay'){
+				return self::aliapppay();
+			}else{
+				return self::wxapppay();
+			}
+		}
+		elseif($order['typename']=='alipay'){
 			return self::alipay();
 		}elseif($order['typename']=='wxpay'){
 			if($mdevice=='wechat' && $channel['appwxmp']>0){
 				return ['type'=>'jump','url'=>$siteurl.'pay/wxjspay/'.TRADE_NO.'/'];
-			}elseif($device=='mobile'){
+			}elseif($device=='mobile' && (in_array('3',$channel['apptype']) || $channel['appwxa']>0)){
 				return self::wxwappay();
 			}else{
 				return self::wxpay();
@@ -73,16 +103,11 @@ class yeepay_plugin
 	}
 
 	//聚合支付托管下单
-	static private function tutelage_pay($payWay, $payType){
+	static private function tutelage_pay($payWay, $payType, $return_type = false){
 		global $siteurl, $channel, $order, $ordername, $conf, $clientip;
 
 		require(PAY_ROOT.'inc/YopClient.php');
 
-		if($payType == 'ALIPAY'){
-			$scene = 'OFFLINE';
-		}else{
-			$scene = 'ONLINE';
-		}
 		$params = [
 			'parentMerchantNo' => $channel['appid'],
 			'merchantNo' => empty($channel['appmchid'])?$channel['appid']:$channel['appmchid'],
@@ -92,34 +117,20 @@ class yeepay_plugin
 			'notifyUrl' => $conf['localurl'] . 'pay/notify/' . TRADE_NO . '/',
 			'payWay' => $payWay,
 			'channel' => $payType,
-			'scene' => $scene,
+			'scene' => $channel['appswitch'] == 1 ? 'OFFLINE' : 'ONLINE',
 			'userIp' => $clientip,
 			'redirectUrl' => $siteurl.'pay/return/'.TRADE_NO.'/',
 		];
-		if($order['profits'] > 0){
-			global $DB;
-			$psreceiver = $DB->find('psreceiver', '*', ['id'=>$order['profits']]);
-			if($psreceiver){
-				$psmoney = round(floor($order['realmoney'] * $psreceiver['rate']) / 100, 2);
-				$divideDetail = [
-					[
-						'ledgerNo' => $psreceiver['account'],
-						'amount' => $psmoney,
-						'ledgerType' => 'MERCHANT2MERCHANT',
-					]
-				];
-				$params['fundProcessType'] = 'REAL_TIME_DIVIDE';
-				$params['divideDetail'] = json_encode($divideDetail);
-				$params['divideNotifyUrl'] = $conf['localurl'] . 'pay/dividenotify/' . TRADE_NO . '/';
-			}
+		if($order['profits']){
+			self::handleProfits($params);
 		}
 
 		$client = new \Yeepay\YopClient($channel['appkey'], $channel['appsecret']);
 
-		return \lib\Payment::lockPayData(TRADE_NO, function() use($client, $params) {
+		return \lib\Payment::lockPayData(TRADE_NO, function() use($client, $params, $return_type) {
 			$result = $client->post('/rest/v1.0/aggpay/tutelage/pre-pay', $params);
         	if($result['code'] == '00000'){
-				return $result['prePayTn'];
+				return $return_type ? ['appId'=>$result['appId'],'miniProgramPath'=>$result['miniProgramPath'],'miniProgramOrgId'=>$result['miniProgramOrgId']] : $result['prePayTn'];
 			}else{
 				throw new Exception('['.$result['code'].']'.$result['message']);
 			}
@@ -142,31 +153,13 @@ class yeepay_plugin
 			'redirectUrl' => $siteurl.'pay/return/'.TRADE_NO.'/',
 			'payWay' => $payWay,
 			'channel' => $payType,
-			'scene' => 'ONLINE',
+			'scene' => $channel['appswitch'] == 1 ? 'OFFLINE' : 'ONLINE',
 			'userIp' => $clientip,
 		];
-		if($appId && $userId){
-			$params += [
-				'appId' => $appId,
-				'userId' => $userId
-			];
-		}
-		if($order['profits'] > 0){
-			global $DB;
-			$psreceiver = $DB->find('psreceiver', '*', ['id'=>$order['profits']]);
-			if($psreceiver){
-				$psmoney = round(floor($order['realmoney'] * $psreceiver['rate']) / 100, 2);
-				$divideDetail = [
-					[
-						'ledgerNo' => $psreceiver['account'],
-						'amount' => $psmoney,
-						'ledgerType' => 'MERCHANT2MERCHANT',
-					]
-				];
-				$params['fundProcessType'] = 'REAL_TIME_DIVIDE';
-				$params['divideDetail'] = json_encode($divideDetail);
-				$params['divideNotifyUrl'] = $conf['localurl'] . 'pay/dividenotify/' . TRADE_NO . '/';
-			}
+		if($appId) $params['appId'] = $appId;
+		if($userId) $params['userId'] = $userId;
+		if($order['profits']){
+			self::handleProfits($params);
 		}
 
 		$client = new \Yeepay\YopClient($channel['appkey'], $channel['appsecret']);
@@ -181,29 +174,100 @@ class yeepay_plugin
 		});
 	}
 
+	static private function handleProfits(&$params){
+		global $order, $conf;
+		$psreceiver = \lib\ProfitSharing\CommUtil::getReceiver($order['profits']);
+		if($psreceiver){
+			$divideDetail = [];
+			foreach($psreceiver['info'] as $receiver){
+				$psmoney = round(floor($order['realmoney'] * $receiver['rate']) / 100, 2);
+				$divideDetail[] = [
+					'ledgerNo' => $receiver['account'],
+					'amount' => $psmoney,
+					'ledgerType' => 'MERCHANT2MERCHANT',
+				];
+			}
+			$params['fundProcessType'] = 'REAL_TIME_DIVIDE';
+			$params['divideDetail'] = json_encode($divideDetail);
+			$params['divideNotifyUrl'] = $conf['localurl'] . 'pay/dividenotify/' . TRADE_NO . '/';
+		}
+	}
+
 	//支付宝扫码支付
 	static public function alipay(){
+		global $channel, $device, $mdevice, $siteurl;
+		if(in_array('2',$channel['apptype']) && !in_array('1',$channel['apptype'])){
+			$code_url = $siteurl.'pay/alipayjs/'.TRADE_NO.'/';
+		}else{
+			try{
+				$code_url = self::pre_pay('USER_SCAN', 'ALIPAY');
+			}catch(Exception $ex){
+				return ['type'=>'error','msg'=>'支付宝支付下单失败！'.$ex->getMessage()];
+			}
+		}
+
+		if(checkalipay() || $mdevice=='alipay'){
+			return ['type'=>'jump','url'=>$code_url];
+		}else{
+			return ['type'=>'qrcode','page'=>'alipay_qrcode','url'=>$code_url];
+		}
+	}
+
+	static public function alipayjs(){
+		global $method, $order;
+		if(!empty($order['sub_openid'])){
+			$user_id = $order['sub_openid'];
+		}else{
+			[$user_type, $user_id] = alipay_oauth();
+		}
+
+		$blocks = checkBlockUser($user_id, TRADE_NO);
+		if($blocks) return $blocks;
+
+		if($user_type == 'openid'){
+			return ['type'=>'error','msg'=>'支付宝快捷登录获取uid失败，需将用户标识切换到uid模式'];
+		}
+
 		try{
-			$code_url = self::pre_pay('USER_SCAN', 'ALIPAY');
+			$alipay_trade_no = self::pre_pay('ALIPAY_LIFE', 'ALIPAY', null, $user_id);
 		}catch(Exception $ex){
 			return ['type'=>'error','msg'=>'支付宝支付下单失败！'.$ex->getMessage()];
 		}
+		if($method == 'jsapi'){
+			return ['type'=>'jsapi','data'=>$alipay_trade_no];
+		}
 
-		return ['type'=>'qrcode','page'=>'alipay_qrcode','url'=>$code_url];
+		if($_GET['d']=='1'){
+			$redirect_url='data.backurl';
+		}else{
+			$redirect_url='\'/pay/ok/'.TRADE_NO.'/\'';
+		}
+		return ['type'=>'page','page'=>'alipay_jspay','data'=>['alipay_trade_no'=>$alipay_trade_no, 'redirect_url'=>$redirect_url]];
 	}
 
 	//微信扫码支付
 	static public function wxpay(){
-		global $siteurl;
+		global $channel, $siteurl, $device, $mdevice;
 
-		$code_url = $siteurl.'pay/wxwappay/'.TRADE_NO.'/';
-		/*try{
-			$code_url = self::pre_pay('USER_SCAN', 'WECHAT');
-		}catch(Exception $ex){
-			return ['type'=>'error','msg'=>'微信支付下单失败！'.$ex->getMessage()];
-		}*/
+		if(in_array('1',$channel['apptype'])){
+			try{
+				$code_url = self::pre_pay('USER_SCAN', 'WECHAT');
+			}catch(Exception $ex){
+				return ['type'=>'error','msg'=>'微信支付下单失败！'.$ex->getMessage()];
+			}
+		}elseif(in_array('3',$channel['apptype']) || !in_array('2',$channel['apptype'])){
+			$code_url = $siteurl.'pay/wxwappay/'.TRADE_NO.'/';
+		}else{
+			if($channel['appwxmp']>0){
+				$code_url = $siteurl.'pay/wxjspay/'.TRADE_NO.'/';
+			}else{
+				$code_url = $siteurl.'pay/wxwappay/'.TRADE_NO.'/';
+			}
+		}
 
-		if (checkmobile()) {
+		if(checkwechat() || $mdevice == 'wechat'){
+			return ['type'=>'jump','url'=>$code_url];
+		} elseif (checkmobile() || $device == 'mobile') {
 			return ['type'=>'qrcode','page'=>'wxpay_wap','url'=>$code_url];
 		} else {
 			return ['type'=>'qrcode','page'=>'wxpay_qrcode','url'=>$code_url];
@@ -212,17 +276,27 @@ class yeepay_plugin
 
 	//微信公众号支付
 	static public function wxjspay(){
-		global $siteurl, $channel, $order, $ordername, $conf, $clientip;
+		global $siteurl, $channel, $order, $method, $conf, $clientip;
 
 		//①、获取用户openid
-		$wxinfo = \lib\Channel::getWeixin($channel['appwxmp']);
-		if(!$wxinfo) return ['type'=>'error','msg'=>'支付通道绑定的微信公众号不存在'];
-		try{
-			$tools = new \WeChatPay\JsApiTool($wxinfo['appid'], $wxinfo['appsecret']);
-			$openid = $tools->GetOpenid();
-		}catch(Exception $e){
-			return ['type'=>'error','msg'=>$e->getMessage()];
-		}
+		if(!empty($order['sub_openid'])){
+			if(!empty($order['sub_appid'])){
+				$wxinfo['appid'] = $order['sub_appid'];
+			}else{
+				$wxinfo = \lib\Channel::getWeixin($channel['appwxmp']);
+				if(!$wxinfo) return ['type'=>'error','msg'=>'支付通道绑定的微信公众号不存在'];
+			}
+			$openid = $order['sub_openid'];
+		}else{
+            $wxinfo = \lib\Channel::getWeixin($channel['appwxmp']);
+            if(!$wxinfo) return ['type'=>'error','msg'=>'支付通道绑定的微信公众号不存在'];
+            try{
+                $tools = new \WeChatPay\JsApiTool($wxinfo['appid'], $wxinfo['appsecret']);
+                $openid = $tools->GetOpenid();
+            }catch(Exception $e){
+                return ['type'=>'error','msg'=>$e->getMessage()];
+            }
+        }
 		$blocks = checkBlockUser($openid, TRADE_NO);
 		if($blocks) return $blocks;
 
@@ -231,6 +305,10 @@ class yeepay_plugin
 			$payinfo = self::pre_pay('WECHAT_OFFIACCOUNT', 'WECHAT', $wxinfo['appid'], $openid);
 		}catch(Exception $ex){
 			return ['type'=>'error','msg'=>'微信支付下单失败！'.$ex->getMessage()];
+		}
+
+		if($method == 'jsapi'){
+			return ['type'=>'jsapi','data'=>$payinfo];
 		}
 
 		if($_GET['d']==1){
@@ -263,7 +341,7 @@ class yeepay_plugin
 		try{
 			$payinfo = self::pre_pay('MINI_PROGRAM', 'WECHAT', $wxinfo['appid'], $openid);
 		}catch(Exception $ex){
-			return ['type'=>'error','msg'=>'微信支付下单失败！'.$ex->getMessage()];
+			exit('{"code":-1,"msg":"'.$ex->getMessage().'"}');
 		}
 
 		exit(json_encode(['code'=>0, 'data'=>json_decode($payinfo, true)]));
@@ -271,17 +349,51 @@ class yeepay_plugin
 
 	//微信手机支付
 	static public function wxwappay(){
+		global $channel;
+		if(in_array('3',$channel['apptype'])){
+			try{
+				$jump_url = self::tutelage_pay('H5_PAY', 'WECHAT');
+			}catch(Exception $ex){
+				return ['type'=>'error','msg'=>'微信支付下单失败！'.$ex->getMessage()];
+			}
+			
+			if(checkwechat()){
+				return ['type'=>'jump','url'=>$jump_url];
+			}else{
+				return ['type'=>'qrcode','page'=>'wxpay_h5','url'=>$jump_url];
+			}
+		}elseif($channel['appwxa']>0){
+            $wxinfo = \lib\Channel::getWeixin($channel['appwxa']);
+			if(!$wxinfo) return ['type'=>'error','msg'=>'支付通道绑定的微信小程序不存在'];
+            try {
+                $code_url = wxminipay_jump_scheme($wxinfo['id'], TRADE_NO);
+            } catch (Exception $e) {
+                return ['type'=>'error','msg'=>$e->getMessage()];
+            }
+            return ['type'=>'scheme','page'=>'wxpay_mini','url'=>$code_url];
+        }else{
+			return self::wxpay();
+		}
+	}
+
+	//支付宝APP支付
+	static public function aliapppay(){
 		try{
-			$jump_url = self::tutelage_pay('H5_PAY', 'WECHAT');
-		}catch(Exception $ex){
-			return ['type'=>'error','msg'=>'微信支付下单失败！'.$ex->getMessage()];
+			$code_url = self::tutelage_pay('SDK_PAY', 'ALIPAY');
+		}catch(Exception $e){
+			return ['type'=>'error','msg'=>$e->getMessage()];
 		}
-		
-		if(checkwechat()){
-			return ['type'=>'jump','url'=>$jump_url];
-		}else{
-			return ['type'=>'qrcode','page'=>'wxpay_h5','url'=>$jump_url];
+		return ['type'=>'scheme','page'=>'alipay_qrcode','url'=>$code_url];
+	}
+
+	//微信APP支付
+	static public function wxapppay(){
+		try{
+			$result = self::tutelage_pay('SDK_PAY', 'WECHAT');
+		}catch(Exception $e){
+			return ['type'=>'error','msg'=>$e->getMessage()];
 		}
+		return ['type'=>'wxapp','data'=>['appId'=>$result['appId'], 'miniProgramId'=>$result['miniProgramOrgId'], 'path'=>$result['miniProgramPath']]];
 	}
 
 	//云闪付扫码支付
@@ -315,10 +427,12 @@ class yeepay_plugin
 			$total_amount = $data['orderAmount'];
 			$payerInfo = json_decode($data['payerInfo'], true);
 			$buyer = $payerInfo['userID'];
+			$bill_trade_no = $data['channelTrxId'];
+			$bill_mch_trade_no = $data['bankOrderId'];
 
 			if ($data['status'] == 'SUCCESS') {
 				if($out_trade_no == TRADE_NO && round($total_amount,2)==round($order['realmoney'],2)){
-					processNotify($order, $api_trade_no, $buyer);
+					processNotify($order, $api_trade_no, $buyer, $bill_trade_no, $bill_mch_trade_no);
 				}
 			}
 			return ['type'=>'html','data'=>'SUCCESS'];
@@ -332,6 +446,11 @@ class yeepay_plugin
 	//支付返回页面
 	static public function return(){
 		return ['type'=>'page','page'=>'return'];
+	}
+
+	//支付成功页面
+	static public function ok(){
+		return ['type'=>'page','page'=>'ok'];
 	}
 
 	//退款
@@ -414,7 +533,7 @@ class yeepay_plugin
 
 	//分账回调
 	static public function dividenotify(){
-		global $channel, $DB;
+		global $channel;
 
 		if(!$_POST['response']) return ['type'=>'html','data'=>'no data'];
 
@@ -430,13 +549,10 @@ class yeepay_plugin
 			$divide_trade_no = $data['divideRequestId'];
 			$out_trade_no = $data['orderId'];
 			$status = $data['divideStatus'];
-			$psorder = $DB->find('psorder', '*', ['trade_no'=>$out_trade_no]);
-			if($psorder){
-				if($status == 'SUCCESS'){
-					$DB->update('psorder', ['status'=>2,'settle_no'=>$divide_trade_no], ['id'=>$psorder['id']]);
-				}elseif($status == 'FAIL'){
-					$DB->update('psorder', ['status'=>3,'result'=>$data['failReason']], ['id'=>$psorder['id']]);
-				}
+			if($status == 'SUCCESS'){
+				processProfitSharing($out_trade_no, 2, null, $divide_trade_no);
+			}elseif($status == 'FAIL'){
+				processProfitSharing($out_trade_no, 3, $data['failReason']);
 			}
 			
 			return ['type'=>'html','data'=>'SUCCESS'];

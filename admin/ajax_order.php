@@ -32,6 +32,70 @@ case 'orderList':
 	}elseif(isset($_POST['subchannel']) && !empty($_POST['subchannel'])) {
 		$subchannel = intval($_POST['subchannel']);
 		$sql.=" AND A.`subchannel`='$subchannel'";
+	}elseif(isset($_POST['applyid']) && !empty($_POST['applyid'])) {
+		$applyid = intval($_POST['applyid']);
+		$sql.=" AND A.`subchannel` IN (SELECT id FROM pre_subchannel WHERE apply_id='{$applyid}')";
+	}
+	if(isset($_POST['dstatus']) && !isNullOrEmpty($_POST['dstatus'])) {
+		if(substr($_POST['dstatus'], 0, 6) == 'settle'){
+			$dstatus = intval(substr($_POST['dstatus'], 7));
+			$sql.=" AND A.settle={$dstatus}";
+		}else{
+			$dstatus = intval($_POST['dstatus']);
+			$sql.=" AND A.status={$dstatus}";
+		}
+	}
+	if(!empty($_POST['starttime']) || !empty($_POST['endtime'])){
+		if(!empty($_POST['starttime'])){
+			$starttime = daddslashes($_POST['starttime']);
+			$sql.=" AND A.addtime>='{$starttime} 00:00:00'";
+		}
+		if(!empty($_POST['endtime'])){
+			$endtime = daddslashes($_POST['endtime']);
+			$sql.=" AND A.addtime<='{$endtime} 23:59:59'";
+		}
+	}
+	if(isset($_POST['value']) && !empty($_POST['value'])) {
+		if($_POST['column']=='name'){
+			$sql.=" AND A.`{$_POST['column']}` like '%{$_POST['value']}%'";
+		}else{
+			if(($_POST['column'] == 'money' || $_POST['column'] == 'realmoney' || $_POST['column'] == 'getmoney') && strpos($_POST['value'],'-')){
+				$money = explode('-', $_POST['value']);
+				$sql.=" AND A.`{$_POST['column']}`>='{$money[0]}' AND A.`{$_POST['column']}`<='{$money[1]}'";
+			}else{
+				$sql.=" AND A.`{$_POST['column']}`='{$_POST['value']}'";
+			}
+		}
+	}
+	$offset = intval($_POST['offset']);
+	$limit = intval($_POST['limit']);
+	$total = $DB->getColumn("SELECT count(*) from pre_order A WHERE{$sql}");
+	$list = $DB->getAll("SELECT A.*,B.plugin,B.name channelname FROM pre_order A LEFT JOIN pre_channel B ON A.channel=B.id WHERE{$sql} order by trade_no desc limit $offset,$limit");
+	$list2 = [];
+	foreach($list as $row){
+		$row['typename'] = $paytypes[$row['type']];
+		$row['typeshowname'] = $paytype[$row['type']];
+		$list2[] = $row;
+	}
+
+	exit(json_encode(['total'=>$total, 'rows'=>$list2]));
+break;
+
+case 'statistics':
+    $sql=" 1=1";
+	if(isset($_POST['uid']) && !empty($_POST['uid'])) {
+		$uid = intval($_POST['uid']);
+		$sql.=" AND A.`uid`='$uid'";
+	}
+	if(isset($_POST['type']) && !empty($_POST['type'])) {
+		$type = intval($_POST['type']);
+		$sql.=" AND A.`type`='$type'";
+	}elseif(isset($_POST['channel']) && !empty($_POST['channel'])) {
+		$channel = intval($_POST['channel']);
+		$sql.=" AND A.`channel`='$channel'";
+	}elseif(isset($_POST['subchannel']) && !empty($_POST['subchannel'])) {
+		$subchannel = intval($_POST['subchannel']);
+		$sql.=" AND A.`subchannel`='$subchannel'";
 	}
 	if(isset($_POST['dstatus']) && $_POST['dstatus']>-1) {
 		$dstatus = intval($_POST['dstatus']);
@@ -51,21 +115,45 @@ case 'orderList':
 		if($_POST['column']=='name'){
 			$sql.=" AND A.`{$_POST['column']}` like '%{$_POST['value']}%'";
 		}else{
-			$sql.=" AND A.`{$_POST['column']}`='{$_POST['value']}'";
+			if(($_POST['column'] == 'money' || $_POST['column'] == 'realmoney' || $_POST['column'] == 'getmoney') && strpos($_POST['value'],'-')){
+				$money = explode('-', $_POST['value']);
+				$sql.=" AND A.`{$_POST['column']}`>='{$money[0]}' AND A.`{$_POST['column']}`<='{$money[1]}'";
+			}else{
+				$sql.=" AND A.`{$_POST['column']}`='{$_POST['value']}'";
+			}
 		}
 	}
-	$offset = intval($_POST['offset']);
-	$limit = intval($_POST['limit']);
-	$total = $DB->getColumn("SELECT count(*) from pre_order A WHERE{$sql}");
-	$list = $DB->getAll("SELECT A.*,B.plugin FROM pre_order A LEFT JOIN pre_channel B ON A.channel=B.id WHERE{$sql} order by trade_no desc limit $offset,$limit");
-	$list2 = [];
-	foreach($list as $row){
-		$row['typename'] = $paytypes[$row['type']];
-		$row['typeshowname'] = $paytype[$row['type']];
-		$list2[] = $row;
-	}
+    // 统计数据
+    $resultMoneyData = $DB->getRow("SELECT 
+    SUM(money) AS totalMoney,
+    SUM(CASE WHEN A.status = 1 THEN money ELSE 0 END) AS successMoney,
+    SUM(CASE WHEN A.status = 0 THEN money ELSE 0 END) AS unpaidMoney,
+    SUM(CASE WHEN A.status = 2 THEN refundmoney ELSE 0 END) AS refundMoney
+    FROM pre_order A LEFT JOIN pre_channel B ON A.channel=B.id WHERE {$sql} order by trade_no desc");
 
-	exit(json_encode(['total'=>$total, 'rows'=>$list2]));
+    $resultCount = $DB->getRow("SELECT 
+    COUNT(*) AS totalCount,
+    SUM(CASE WHEN A.status = 1 THEN 1 ELSE 0 END) AS successCount,
+    SUM(CASE WHEN A.status = 0 THEN 1 ELSE 0 END) AS unpaidCount,
+    SUM(CASE WHEN A.status = 2 THEN 1 ELSE 0 END) AS refundCount
+    FROM pre_order A LEFT JOIN pre_channel B ON A.channel=B.id WHERE {$sql} order by trade_no desc");
+
+    // 获取平台总收入利润
+    $platformProfit = $DB->getColumn("SELECT SUM(A.profitmoney) FROM pre_order A LEFT JOIN pre_channel B ON A.channel=B.id WHERE {$sql} AND status = 1 order by trade_no desc");
+
+	$result = [
+        'totalMoney' => number_format($resultMoneyData['totalMoney'], 2, '.', '') ?? 0.00,
+        'successMoney' => number_format($resultMoneyData['successMoney'], 2, '.', '') ?? 0.00,
+        'unpaidMoney' => number_format($resultMoneyData['unpaidMoney'], 2, '.', '') ?? 0.00,
+        'refundMoney' => number_format($resultMoneyData['refundMoney'], 2, '.', '') ?? 0.00,
+        'totalCount' => $resultCount['totalCount'] ?? '0',
+        'successCount' => $resultCount['successCount'] ?? '0',
+        'unpaidCount' => $resultCount['unpaidCount'] ?? '0',
+        'refundCount' => $resultCount['refundCount'] ?? '0',
+        'platformProfit' => number_format($platformProfit, 2, '.', '') ?? 0.00
+    ];
+	$result['successRate'] = $result['totalCount'] > 0 ? round(($result['totalCount']-$result['unpaidCount']) / $result['totalCount'] * 100, 2) : 0;
+	exit(json_encode(['code'=>0, 'data'=>$result]));
 break;
 
 case 'riskList':
@@ -106,8 +194,16 @@ case 'order': //订单详情
 	if(!$row)
 		exit('{"code":-1,"msg":"当前订单不存在或未成功选择支付通道！"}');
 	$row['subchannelname'] = $row['subchannel'] > 0 ? $DB->findColumn('subchannel', 'name', ['id'=>$row['subchannel']]) : '';
+	if($row['status']==2){
+		$row['refundtime'] = $DB->findColumn('refundorder', 'addtime', ['trade_no'=>$trade_no], 'refund_no DESC');
+	}
 	$result=array("code"=>0,"msg"=>"succ","data"=>$row);
 	exit(json_encode($result));
+break;
+case 'subOrders':
+	$trade_no=trim($_GET['trade_no']);
+	$list = \lib\Payment::getSubOrders($trade_no);
+	exit(json_encode(['code'=>0, 'data'=>$list, 'settle'=>$DB->findColumn('order', 'settle', ['trade_no'=>$trade_no])]));
 break;
 case 'operation': //批量操作订单
 	$status=is_numeric($_POST['status'])?intval($_POST['status']):exit('{"code":-1,"msg":"请选择操作"}');
@@ -156,7 +252,7 @@ case 'apirefund': //API退款操作
 	$refund_no = date("YmdHis").rand(11111,99999);
 	$result = \lib\Order::refund($refund_no, $trade_no, $money, 1);
 	if($result['code'] == 0){
-		$result['msg'] = '退款成功！退款金额￥'.$result['money'];
+		$result['msg'] = '退款成功！退款金额¥'.$result['money'];
 		if($result['reducemoney']>0){
 			$result['msg'] .= '，并成功从UID:'.$result['uid'].'扣除'.$result['reducemoney'].'元余额';
 		}
@@ -179,6 +275,13 @@ case 'notify': //获取回调地址
 	if(!$row)
 		exit('{"code":-1,"msg":"当前订单不存在！"}');
 	$url=creat_callback($row);
+	if($_POST['isget'] == 1){
+		if(do_notify($url['notify'])){
+			$DB->exec("UPDATE pre_order SET notify=0 WHERE trade_no='$trade_no'");
+			exit('{"code":0}');
+		}
+		exit('{"code":-1}');
+	}
 	if($row['notify']>0)
 		$DB->exec("update pre_order set notify=0,notifytime=NULL where trade_no='$trade_no'");
 	exit('{"code":0,"url":"'.($_POST['isreturn']==1?$url['return']:$url['notify']).'"}');
@@ -208,22 +311,17 @@ case 'alipaydSettle': //支付宝直付通确认结算
 	}
 	try{
 		if($channel['plugin'] == 'alipayd'){
-			\lib\Payment::alipaydSettle($trade_no, $row['api_trade_no'], $row['realmoney'], $row['combine'], $row['ext']);
+			\lib\Payment::alipaydSettle($channel, $row);
 		}elseif($channel['plugin'] == 'wxpaynp'){
-			\lib\Payment::wxpaynpSettle($trade_no, $row['api_trade_no'], $row['profits']);
+			\lib\Payment::wxpaynpSettle($channel, $row);
 		}else{
 			exit('{"code":-1,"msg":"支付插件不支持该操作"}');
 		}
 		$DB->exec("update `pre_order` set `settle`=2 where `trade_no`='$trade_no'");
 		exit('{"code":0,"msg":"结算成功！"}');
 	}catch(Exception $e){
-		$errmsg = $e->getMessage();
-		if(strpos($errmsg, 'ALREADY_CONFIRM_SETTLE')){
-			$DB->exec("update `pre_order` set `settle`=2 where `trade_no`='$trade_no'");
-			exit('{"code":0,"msg":"'.$errmsg.'"}');
-		}
 		$DB->exec("update `pre_order` set `settle`=3 where `trade_no`='$trade_no'");
-		exit('{"code":-1,"msg":"结算失败,'.$errmsg.'"}');
+		exit('{"code":-1,"msg":"结算失败,'.$e->getMessage().'"}');
 	}
 break;
 case 'alipayPreAuthPay': //支付宝授权资金支付
@@ -236,7 +334,7 @@ case 'alipayPreAuthPay': //支付宝授权资金支付
 		exit('{"code":-1,"msg":"当前支付通道信息不存在"}');
 	}
 	try{
-		$result = \lib\Payment::alipayPreAuthPay($trade_no);
+		$result = \lib\Payment::alipayPreAuthPay($channel, $order);
 
 		$api_trade_no = $result['trade_no'];
 		$buyer_id = $result['buyer_user_id'];
@@ -259,7 +357,7 @@ case 'alipayUnfreeze': //支付宝授权资金解冻
 		exit('{"code":-1,"msg":"当前支付通道信息不存在"}');
 	}
 	try{
-		\lib\Payment::alipayUnfreeze($trade_no);
+		\lib\Payment::alipayUnfreeze($channel, $order);
 		$DB->exec("update `pre_order` set `status`=0 where `trade_no`='$trade_no'");
 		exit('{"code":0,"msg":"授权资金解冻成功！"}');
 	}catch(Exception $e){
@@ -280,7 +378,7 @@ case 'alipayRedPacketTansfer': //支付宝红包转账重试
 	else $payee_user_id = $DB->findColumn('user', 'alipay_uid', ['uid'=>$order['uid']]);
 	if(!$payee_user_id) exit('{"code":-1,"msg":"当前商户未绑定支付宝账号"}');
 	try{
-		\lib\Payment::alipayRedPacketTransfer($payee_user_id, $order['money'], $order['api_trade_no']);
+		\lib\Payment::alipayRedPacketTransfer($channel, $payee_user_id, $order['money'], $order['api_trade_no']);
 		$DB->exec("update `pre_order` set `settle`=2 where `trade_no`='$trade_no'");
 		exit('{"code":0,"msg":"红包打款成功！"}');
 	}catch(Exception $e){

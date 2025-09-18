@@ -153,7 +153,7 @@ class UmfService
 		);
 		foreach($chkKeys as $key){
 			if(isset($param[$key])){
-				$param[$key] = $this->rsaPubilcEncrypt($param[$key]);
+				$param[$key] = $this->rsaPublicEncrypt($param[$key]);
 			}
 		}
 		return $param;
@@ -181,7 +181,7 @@ class UmfService
 	}
 
 	//平台公钥加密
-	private function rsaPubilcEncrypt($data){
+	private function rsaPublicEncrypt($data){
 		$pubkeyid = openssl_get_publickey($this->platform_public_key);
 		if(!$pubkeyid){
 			throw new Exception('加密失败，平台公钥不正确');

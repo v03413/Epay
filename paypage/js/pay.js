@@ -93,7 +93,7 @@ function submitFun(){
     var paytype = $("#paytype").val();
     var token = $("#token").val();
 	var direct = $("#direct").val();
-	var payer = $("#payer").val();
+	var payer = encodeURIComponent($("#payer").val());
     var remark = document.querySelector("#remark-content").innerText;
 
     submitAble = false;

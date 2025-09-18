@@ -72,7 +72,6 @@ class xunhupay_plugin
 
 		$client = new XunhupayClient($channel['appid'],$channel['appkey'],$channel['appurl']);
 		$result = $client->do_payment($params);
-		
 		if(checkmobile() || $device=='mobile'){
 			return ['jump', $result['url']];
 		}else{
@@ -144,4 +143,20 @@ class xunhupay_plugin
 		return ['type'=>'page','page'=>'return'];
 	}
 
+	//退款
+	static public function refund($order){
+		global $channel;
+		if(empty($order))exit();
+		require_once(PAY_ROOT."inc/XunhupayClient.php");
+		$client = new XunhupayClient($channel['appid'],$channel['appkey'],$channel['appurl']);
+		$params = [
+			'open_order_id' => $order['api_trade_no']
+		];
+		try{
+			$result = $client->do_refund($params);
+			return ['code'=>0, 'trade_no'=>$result['transaction_id'], 'refund_fee'=>$result['refund_fee']];
+		}catch(Exception $ex){
+			return ['code'=>-1,'msg'=>$ex->getMessage()];
+		}
+	}
 }

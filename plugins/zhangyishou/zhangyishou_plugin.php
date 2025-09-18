@@ -8,6 +8,7 @@ class zhangyishou_plugin
 		'author'      => '掌易收', //支付插件作者
 		'link'        => 'http://www.zhangyishou.com/', //支付插件作者链接
 		'types'       => ['alipay','qqpay','wxpay','bank'], //支付插件支持的支付方式，可选的有alipay,qqpay,wxpay,bank
+		'transtypes'  => ['alipay','bank'],
 		'inputs' => [ //支付插件要求传入的参数以及参数显示名称，可选的有appid,appkey,appsecret,appurl,appmchid
 			'appid' => [
 				'name' => '登录账号',
@@ -39,9 +40,9 @@ class zhangyishou_plugin
 	static public function submit(){
 		global $siteurl, $channel, $order, $ordername, $sitename, $conf;
 
-		if(checkwechat()){
+		/*if(checkwechat()){
 			return ['type'=>'jump','url'=>'/pay/wxjspay/'.TRADE_NO.'/'];
-		}
+		}*/
 
 		return ['type'=>'jump','url'=>'/pay/'.$order['typename'].'/'.TRADE_NO.'/'];
 	}
@@ -65,7 +66,7 @@ class zhangyishou_plugin
 			'OrderTime' => date('Y-m-d H:i:s'),
 			'PayChannelId' => $pay_config['PayChannelId'],
 			'AsynPath' => $conf['localurl'].'pay/notify/'.TRADE_NO.'/',
-			'OrderMoney' => sprintf("%.2f",$order['realmoney']),
+			'OrderMoney' => $order['realmoney'],
 			'IPPath' => $clientip,
 		];
 
@@ -82,7 +83,7 @@ class zhangyishou_plugin
 		}
 
 		return \lib\Payment::lockPayData(TRADE_NO, function() use($getwayurl, $params) {
-			$data = zz_get_curl($getwayurl, json_encode($params));
+			$data = get_curl($getwayurl, json_encode($params), 0, 0, 0, 0, 0, ['Content-Type: application/json; charset=utf-8']);
 			$result = json_decode($data, true);
 
 			if($result['Code']=='1009'){
@@ -98,13 +99,18 @@ class zhangyishou_plugin
 
 	//支付宝扫码支付
 	static public function alipay(){
+		global $mdevice, $siteurl;
 		try{
 			$code_url = self::qrcode('alipay');
 		}catch(Exception $ex){
 			return ['type'=>'error','msg'=>'支付宝支付下单失败！'.$ex->getMessage()];
 		}
 
-		return ['type'=>'qrcode','page'=>'alipay_qrcode','url'=>$code_url];
+		if(checkalipay() || $mdevice=='alipay'){
+			return ['type'=>'jump','url'=>$code_url];
+		}else{
+			return ['type'=>'qrcode','page'=>'alipay_qrcode','url'=>$code_url];
+		}
 	}
 
 	//微信扫码支付
@@ -128,9 +134,9 @@ class zhangyishou_plugin
 		
 		if($isscheme){
 			return ['type'=>'scheme','page'=>'wxpay_mini','url'=>$code_url];
-		} elseif(checkwechat()){
+		} elseif(checkwechat() || $mdevice == 'wechat'){
 			return ['type'=>'jump','url'=>$code_url];
-		} elseif (checkmobile()) {
+		} elseif (checkmobile() || $device == 'mobile') {
 			return ['type'=>'qrcode','page'=>'wxpay_wap','url'=>$code_url];
 		} else {
 			return ['type'=>'qrcode','page'=>'wxpay_qrcode','url'=>$code_url];
@@ -149,7 +155,7 @@ class zhangyishou_plugin
 			'RedirectUri' => $redirect_uri,
 			'WayId' => $channel['appmchid'],
 		];
-		$data = zz_get_curl($url, json_encode($params));
+		$data = get_curl($url, json_encode($params), 0, 0, 0, 0, 0, ['Content-Type: application/json; charset=utf-8']);
 		$result = json_decode($data, true);
 		if($result['Code']=='1009'){
 			return $result['Info'];
@@ -170,7 +176,7 @@ class zhangyishou_plugin
 			'RedirectUri' => '',
 			'WayId' => $channel['appmchid'],
 		];
-		$data = zz_get_curl($url, json_encode($params));
+		$data = get_curl($url, json_encode($params), 0, 0, 0, 0, 0, ['Content-Type: application/json; charset=utf-8']);
 		$result = json_decode($data, true);
 		if($result['Code']=='1009'){
 			return $result['Info'];
@@ -186,7 +192,7 @@ class zhangyishou_plugin
 			'openId' => $openid,
 			'orderNo' => $orderno,
 		];
-		$data = zz_get_curl($url, json_encode($params));
+		$data = get_curl($url, json_encode($params), 0, 0, 0, 0, 0, ['Content-Type: application/json; charset=utf-8']);
 		$result = json_decode($data, true);
 		if($result['Code']=='1009'){
 			return $result['Info'];
@@ -258,6 +264,7 @@ class zhangyishou_plugin
 		require(PAY_ROOT."inc/config.php");
 		$json = file_get_contents("php://input");
 		$data = json_decode($json, true);
+		if(!$data) return ['type'=>'html','data'=>'data error'];
 
 		$signStr = $data['MerchantId'].$data['DownstreamOrderNo'].$pay_config['key'];
 		$sign = md5($signStr);
@@ -288,8 +295,8 @@ class zhangyishou_plugin
 		$getwayurl = 'https://apipay.zhangyishou.com/api/OrderRefund/Refund';
 		$params = [
 			'MerchantId' => $pay_config['MerchantId'],
-			'MerchantOrderNo' => TRADE_NO,
-			'RefundAmount' => sprintf("%.2f",$order['refundmoney']),
+			'MerchantOrder' => $order['trade_no'],
+			'RefundAmount' => $order['refundmoney'],
 		];
 
 		$signStr = "";
@@ -299,7 +306,7 @@ class zhangyishou_plugin
 		$signStr .= $pay_config['key'];
 		$params['MD5Sign'] = md5($signStr);
 
-		$data = zz_get_curl($getwayurl, json_encode($params));
+		$data = get_curl($getwayurl, json_encode($params), 0, 0, 0, 0, 0, ['Content-Type: application/json; charset=utf-8']);
 
 		$result = json_decode($data, true);
 
@@ -309,6 +316,119 @@ class zhangyishou_plugin
 			$result = ['code'=>-1, 'msg'=>$result["Message"]];
 		}
 		return $result;
+	}
+
+	//转账
+	static public function transfer($channel, $bizParam){
+		global $clientip, $conf;
+		if(empty($channel) || empty($bizParam))exit();
+
+		if($bizParam['type'] == 'alipay'){
+			$PayChannelId = '12002';
+			$PaymentType = '3';
+			if(is_numeric($bizParam['payee_account']) && substr($bizParam['payee_account'],0,4)=='2088')$AccountNumberType = '2';
+			elseif(strpos($bizParam['payee_account'], '@')!==false || is_numeric($bizParam['payee_account']))$AccountNumberType = '1';
+			else $AccountNumberType = '3';
+		}else{
+			$PayChannelId = '12001';
+			$PaymentType = '2';
+			$AccountNumberType = '1';
+		}
+
+		require(PLUGIN_ROOT.'zhangyishou/inc/config.php');
+		$getwayurl = 'https://apipay.zhangyishou.com/api/Order/AddOrder';
+		$params = [
+			'MerchantId' => $pay_config['MerchantId'],
+			'DownstreamOrderNo' => $bizParam['out_biz_no'],
+			'OrderTime' => date('Y-m-d H:i:s'),
+			'PayChannelId' => $PayChannelId,
+			'AsynPath' => $conf['localurl'].'pay/transfernotify/'.$channel['id'].'/',
+			'OrderMoney' => sprintf('%.2f', $bizParam['money']),
+			'IPPath' => $clientip,
+		];
+
+		$signStr = "";
+		foreach($params as $row){
+			$signStr .= $row;
+		}
+		$signStr .= $pay_config['key'];
+		$params += [
+			'MD5Sign' => md5($signStr),
+			'MerchantNo' => $pay_config['MerchantNo'],
+			'PaymentType' => $PaymentType,
+			'AccountNumber' => $bizParam['payee_account'],
+			'AccountNumberType' => $AccountNumberType,
+			'AccountName' => $bizParam['payee_real_name'],
+			'PaymentRemark' => $bizParam['transfer_desc'],
+			'ReasonPayment' => $bizParam['transfer_desc'],
+			'Mproductdesc' => $bizParam['transfer_desc'],
+		];
+
+		$data = get_curl($getwayurl, json_encode($params), 0, 0, 0, 0, 0, ['Content-Type: application/json; charset=utf-8']);
+
+		$result = json_decode($data, true);
+		if($result['Code']=='1009'){
+			$info = json_decode($result['Info'], true);
+			$order_id = $info['alipay_fund_trans_uni_transfer_response']['out_biz_no'];
+			return ['code'=>0, 'status'=>0, 'orderid'=>$order_id, 'paydate'=>date('Y-m-d H:i:s')];
+		}else{
+			return ['code'=>-1, 'msg'=>$result["Message"]?$result["Message"]:'返回数据解析失败'];
+		}
+	}
+
+	//异步回调
+	static public function transfernotify(){
+		global $channel, $order;
+
+		require(PAY_ROOT."inc/config.php");
+		$json = file_get_contents("php://input");
+		$data = json_decode($json, true);
+		if(!$data) return ['type'=>'html','data'=>'data error'];
+
+		$signStr = $data['MerchantId'].$data['DownstreamOrderNo'].$pay_config['key'];
+		$sign = md5($signStr);
+
+		if($sign === $data['Signature']){
+			$errmsg = null;
+			if($data['OrderState'] == '1'){
+				$status = 1;
+			}else{
+				$status = 2;
+				$errmsg = $data['Remark'];
+			}
+			processTransfer($data['DownstreamOrderNo'], $status, $errmsg);
+			return ['type'=>'html','data'=>'OK'];
+		}
+		else {
+			return ['type'=>'html','data'=>'ERROR'];
+		}
+	}
+
+	//余额查询
+	static public function balance_query($channel, $bizParam){
+		if(empty($channel))exit();
+
+		require(PLUGIN_ROOT.'zhangyishou/inc/config.php');
+		$getwayurl = 'https://apipay.zhangyishou.com/query/bookQuery';
+		$params = [
+			'userName' => $pay_config['MerchantId'],
+			'merchantNo' => $pay_config['MerchantNo'],
+		];
+		$signStr = "";
+		foreach($params as $row){
+			$signStr .= $row;
+		}
+		$signStr .= $pay_config['key'];
+		$params['MD5Sign'] = md5($signStr);
+
+		$data = get_curl($getwayurl, json_encode($params), 0, 0, 0, 0, 0, ['Content-Type: application/json; charset=utf-8']);
+
+		$result = json_decode($data, true);
+		if($result['Code']=='1009'){
+			return ['code'=>0, 'amount'=>$result['Info']];
+		}else{
+			return ['code'=>-1, 'msg'=>$result["Message"]?$result["Message"]:'返回数据解析失败'];
+		}
 	}
 
 }

@@ -34,7 +34,7 @@ class AlipayRequest
      *
      * @return string
      */
-    public static function getTimestamp()
+    public static function getTimestamp(): string
     {
         return date('Y-m-d H:i:s');
     }
@@ -44,12 +44,12 @@ class AlipayRequest
      *
      * @return string
      */
-    public function getApiMethodName()
+    public function getApiMethodName(): string
     {
         return $this->apiMethodName;
     }
 
-    public function setApiMethodName($apiMethodName)
+    public function setApiMethodName($apiMethodName): AlipayRequest
     {
         $this->apiMethodName = $apiMethodName;
 
@@ -61,7 +61,7 @@ class AlipayRequest
         return $this->notifyUrl;
     }
 
-    public function setNotifyUrl($notifyUrl)
+    public function setNotifyUrl($notifyUrl): AlipayRequest
     {
         $this->notifyUrl = $notifyUrl;
 
@@ -73,7 +73,7 @@ class AlipayRequest
         return $this->returnUrl;
     }
 
-    public function setReturnUrl($returnUrl)
+    public function setReturnUrl($returnUrl): AlipayRequest
     {
         $this->returnUrl = $returnUrl;
 
@@ -85,7 +85,7 @@ class AlipayRequest
         return $this->terminalType;
     }
 
-    public function setTerminalType($terminalType)
+    public function setTerminalType($terminalType): AlipayRequest
     {
         $this->terminalType = $terminalType;
 
@@ -97,7 +97,7 @@ class AlipayRequest
         return $this->terminalInfo;
     }
 
-    public function setTerminalInfo($terminalInfo)
+    public function setTerminalInfo($terminalInfo): AlipayRequest
     {
         $this->terminalInfo = $terminalInfo;
 
@@ -109,7 +109,7 @@ class AlipayRequest
         return $this->prodCode;
     }
 
-    public function setProdCode($prodCode)
+    public function setProdCode($prodCode): AlipayRequest
     {
         $this->prodCode = $prodCode;
 
@@ -121,7 +121,7 @@ class AlipayRequest
         return $this->authToken;
     }
 
-    public function setAuthToken($authToken)
+    public function setAuthToken($authToken): AlipayRequest
     {
         $this->authToken = $authToken;
 
@@ -133,7 +133,7 @@ class AlipayRequest
         return $this->appAuthToken;
     }
 
-    public function setAppAuthToken($appAuthToken)
+    public function setAppAuthToken($appAuthToken): AlipayRequest
     {
         $this->appAuthToken = $appAuthToken;
 
@@ -148,7 +148,7 @@ class AlipayRequest
         return $this->bizContent;
     }
 
-    public function setBizContent($bizContent = [])
+    public function setBizContent($bizContent = []): AlipayRequest
     {
         $this->bizContent = $bizContent;
 

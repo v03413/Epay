@@ -1,15 +1,15 @@
 <?php
 @header('Content-Type: text/html; charset=UTF-8');
 
-$admin_cdnpublic = 4;
+$admin_cdnpublic = 0;
 if($admin_cdnpublic==1){
 	$cdnpublic = '//lib.baomitu.com/';
 }elseif($admin_cdnpublic==2){
 	$cdnpublic = 'https://s4.zstatic.net/ajax/libs/';
 }elseif($admin_cdnpublic==4){
-	$cdnpublic = '//lf26-cdn-tos.bytecdntp.com/cdn/expire-1-M/';
+	$cdnpublic = 'https://cdnjs.snrat.com/ajax/libs/';
 }else{
-	$cdnpublic = '//mirrors.sustech.edu.cn/cdnjs/ajax/libs/';
+	$cdnpublic = '/assets/vendor/';
 }
 ?>
 <!DOCTYPE html>
@@ -24,7 +24,7 @@ if($admin_cdnpublic==1){
   <link href="../assets/css/bootstrap-table.css?v=1" rel="stylesheet"/>
   <link href="<?php echo $cdnpublic?>font-awesome/4.7.0/css/font-awesome.min.css" rel="stylesheet"/>
   <script src="<?php echo $cdnpublic?>modernizr/2.8.3/modernizr.min.js"></script>
-  <script src="<?php echo $cdnpublic?>jquery/2.1.4/jquery.min.js"></script>
+  <script src="<?php echo $cdnpublic?>jquery/3.4.1/jquery.min.js"></script>
   <script src="<?php echo $cdnpublic?>twitter-bootstrap/3.4.1/js/bootstrap.min.js"></script>
   <!--[if lt IE 9]>
     <script src="<?php echo $cdnpublic?>html5shiv/3.7.3/html5shiv.min.js"></script>
@@ -49,13 +49,32 @@ if($admin_cdnpublic==1){
           <li class="<?php echo checkIfActive('index,')?>">
             <a href="./"><i class="fa fa-home"></i> 平台首页</a>
           </li>
-		  <li class="<?php echo checkIfActive('order')?>">
-            <a href="./order.php"><i class="fa fa-list"></i> 订单管理</a>
+          <li class="<?php echo checkIfActive('order,export,ps_receiver,ps_order,buyerstat,blacklist')?>">
+            <a href="#" class="dropdown-toggle" data-toggle="dropdown"><i class="fa fa-list"></i> 收款订单<b class="caret"></b></a>
+            <ul class="dropdown-menu">
+              <li><a href="./order.php">订单管理</a></li>
+              <li><a href="./export.php">导出订单</a><li>
+              <li><a href="./buyerstat.php">支付用户统计</a></li>
+              <li><a href="./blacklist.php">黑名单管理</a></li>
+              <li role="separator" class="divider"></li>
+              <li><a href="./ps_receiver.php">分账规则</a><li>
+              <li><a href="./ps_order.php">分账记录</a><li>
+            </ul>
           </li>
-		  <li class="<?php echo checkIfActive('settle,slist')?>">
-            <a href="./slist.php"><i class="fa fa-cloud"></i> 结算管理</a>
+          <li class="<?php echo checkIfActive('settle,settle_batch,slist,transfer,transfer_add,transfer_export,transfer_red,transfer_batch')?>">
+            <a href="#" class="dropdown-toggle" data-toggle="dropdown"><i class="fa fa-cloud"></i> 付款管理<b class="caret"></b></a>
+            <ul class="dropdown-menu">
+              <li><a href="./slist.php">结算管理</a></li>
+              <li><a href="./settle.php">批量结算</a><li>
+              <li role="separator" class="divider"></li>
+              <li><a href="./transfer.php">付款记录</a><li>
+              <li><a href="./transfer_add.php">新增付款</a><li>
+              <li><a href="./transfer_red.php">创建红包</a><li>
+              <li><a href="./transfer_export.php">导出付款记录</a><li>
+              <?php if(class_exists('\\lib\\AlipaySATF\\AlipaySATF')){?><li><a href="./satf_transfer.php">安全发转账记录</a></li><?php }?>
+            </ul>
           </li>
-		  <li class="<?php echo checkIfActive('ulist,glist,group,record,uset,domain,ustat,invitecode')?>">
+		  <li class="<?php echo checkIfActive('ulist,glist,gedit,group,record,uset,domain,ustat,invitecode,uexport')?>">
             <a href="#" class="dropdown-toggle" data-toggle="dropdown"><i class="fa fa-user"></i> 商户管理<b class="caret"></b></a>
             <ul class="dropdown-menu">
               <li><a href="./ulist.php">用户列表</a></li>
@@ -67,7 +86,7 @@ if($admin_cdnpublic==1){
         <?php if($conf['reg_open']==2){?><li><a href="./invitecode.php">邀请码管理</a></li><?php }?>
             </ul>
           </li>
-		  <li class="<?php echo checkIfActive('pay_channel,pay_roll,pay_type,pay_plugin,pay_weixin')?>">
+		  <li class="<?php echo checkIfActive('pay_channel,pay_roll,pay_type,pay_plugin,pay_weixin,applyments_channel,applyments_merchant,applyments_form')?>">
             <a href="#" class="dropdown-toggle" data-toggle="dropdown"><i class="fa fa-credit-card"></i> 支付接口<b class="caret"></b></a>
             <ul class="dropdown-menu">
               <li><a href="./pay_channel.php">支付通道</a></li>
@@ -75,6 +94,8 @@ if($admin_cdnpublic==1){
 			  <li><a href="./pay_plugin.php">支付插件</a></li>
         <li><a href="./pay_roll.php">支付通道轮询</a></li>
         <li><a href="./pay_weixin.php">公众号小程序</a></li>
+        <?php if(class_exists('\\lib\\Applyments\\CommUtil')){?><li><a href="./applyments_channel.php">进件渠道管理</a></li>
+        <li><a href="./applyments_merchant.php">进件商户管理</a></li><?php }?>
             </ul>
           </li>
 		  <li class="<?php echo checkIfActive('set,gonggao,set_wxkf')?>">
@@ -82,8 +103,9 @@ if($admin_cdnpublic==1){
             <ul class="dropdown-menu">
               <li><a href="./set.php?mod=site">网站信息配置</a></li>
 			  <li><a href="./set.php?mod=pay">支付相关配置</a><li>
+        <li><a href="./set.php?mod=risk">风控检测配置</a><li>
         <li><a href="./set.php?mod=settle">结算规则配置</a><li>
-			  <li><a href="./set.php?mod=transfer">企业付款配置</a><li>
+			  <li><a href="./set.php?mod=transfer">转账付款配置</a><li>
 			  <li><a href="./set.php?mod=oauth">快捷登录配置</a><li>
         <li><a href="./set.php?mod=notice">消息提醒配置</a><li>
 			  <li><a href="./set.php?mod=certificate">实名认证配置</a><li>
@@ -95,19 +117,15 @@ if($admin_cdnpublic==1){
         <li><a href="./set_wxkf.php">H5跳转微信客服支付</a></li>
             </ul>
           </li>
-		  <li class="<?php echo checkIfActive('clean,log,transfer,transfer_add,risk,alipayrisk,export,ps_receiver,ps_order,gettoken,blacklist,complain,complain_info')?>">
+		  <li class="<?php echo checkIfActive('clean,log,risk,gettoken,complain,complain_info')?>">
             <a href="#" class="dropdown-toggle" data-toggle="dropdown"><i class="fa fa-cube"></i> 其他功能<b class="caret"></b></a>
             <ul class="dropdown-menu">
-        <li><a href="./export.php">导出订单</a><li>
-			  <li><a href="./transfer_add.php">企业付款</a><li>
-        <li><a href="./transfer.php">付款记录</a><li>
 			  <li><a href="./risk.php">风控记录</a><li>
 			  <li><a href="./log.php">登录日志</a><li>
 			  <li><a href="./clean.php">数据清理</a><li>
-        <li><a href="./ps_receiver.php">分账规则</a><li>
-        <li><a href="./ps_order.php">分账记录</a><li>
         <li><a href="./gettoken.php">获取用户标识</a><li>
-        <li><a href="./blacklist.php">黑名单管理</a></li>
+        <?php if(class_exists('\\lib\\Complain\\CommUtil')){?><li><a href="./complain.php">支付交易投诉</a></li><?php }?>
+        <?php if(class_exists('\\lib\\WxMchRisk')){?><li><a href="./mchrisk.php">渠道商户违规记录</a></li><?php }?>
             </ul>
           </li>
           <li><a href="./login.php?logout" onclick="return confirm('是否确定退出登录？')"><i class="fa fa-power-off"></i> 退出登录</a></li>

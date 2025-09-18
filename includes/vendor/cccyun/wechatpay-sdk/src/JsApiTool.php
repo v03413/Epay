@@ -2,6 +2,8 @@
 
 namespace WeChatPay;
 
+use Exception;
+
 /**
  * JSAPI支付工具类
  * 实现了从微信公众平台获取code、通过code获取openid和access_token
@@ -36,22 +38,21 @@ class JsApiTool
         $this->appsecret = $appsecret;
     }
 
-    /**
-     * 通过跳转获取用户的openid，跳转流程如下：
-     * 1、设置自己需要调回的url及其其他参数，跳转到微信服务器
-     * 2、微信服务处理完成之后会跳转回用户redirect_uri地址，此时会带上一些参数，如：code
-     * 
-     * @return 用户的openid
-     */
-    public function GetOpenid()
+	/**
+	 * 通过跳转获取用户的openid，跳转流程如下：
+	 * 1、设置自己需要调回的url及其其他参数，跳转到微信服务器
+	 * 2、微信服务处理完成之后会跳转回用户redirect_uri地址，此时会带上一些参数，如：code
+	 *
+	 * @return string 用户的openid
+	 * @throws Exception
+	 */
+    public function GetOpenid(): string
     {
         if (!isset($_GET['code'])) {
             $this->login();
-        } else {
-            $code = $_GET['code'];
-            $openid = $this->GetOpenidFromMp($code);
-            return $openid;
         }
+        $code = $_GET['code'];
+        return $this->GetOpenidFromMp($code);
     }
 
     /**
@@ -76,13 +77,14 @@ class JsApiTool
         exit;
     }
 
-    /**
-     * 从公众平台获取openid
-     * @param string $code 微信跳转回来带上的code
-     * 
-     * @return string openid
-     */
-    public function GetOpenidFromMp($code)
+	/**
+	 * 从公众平台获取openid
+	 * @param string $code 微信跳转回来带上的code
+	 *
+	 * @return string openid
+	 * @throws Exception
+	 */
+    public function GetOpenidFromMp(string $code): string
     {
         $param = [
             "appid" => $this->appid,
@@ -97,19 +99,20 @@ class JsApiTool
             $this->data = $data;
             return $data['openid'];
         } elseif (isset($data['errcode'])) {
-            throw new \Exception('Openid获取失败 [' . $data['errcode'] . ']' . $data['errmsg']);
+            throw new Exception('Openid获取失败 [' . $data['errcode'] . ']' . $data['errmsg']);
         } else {
-            throw new \Exception('Openid获取失败，原因未知');
+            throw new Exception('Openid获取失败，原因未知');
         }
     }
 
-    /**
-     * 微信小程序获取Openid
-     * @param string $code 登录时获取的code
-     * 
-     * @return string openid
-     */
-    public function AppGetOpenid($code)
+	/**
+	 * 微信小程序获取Openid
+	 * @param string $code 登录时获取的code
+	 *
+	 * @return string openid
+	 * @throws Exception
+	 */
+    public function AppGetOpenid(string $code): string
     {
         $param = [
             "appid" => $this->appid,
@@ -124,18 +127,18 @@ class JsApiTool
             $this->data = $data;
             return $data['openid'];
         } elseif (isset($data['errcode'])) {
-            throw new \Exception('获取openid失败 [' . $data['errcode'] . ']' . $data['errmsg']);
+            throw new Exception('获取openid失败 [' . $data['errcode'] . ']' . $data['errmsg']);
         } else {
-            throw new \Exception('获取openid失败，原因未知');
+            throw new Exception('获取openid失败，原因未知');
         }
     }
 
     /**
      * 发起GET请求
-     * @param $url 请求url
+     * @param string $url 请求url
      * @return string
      */
-    private function curl($url)
+    private function curl(string $url): string
     {
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_TIMEOUT, 6);

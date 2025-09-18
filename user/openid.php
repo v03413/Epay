@@ -17,7 +17,7 @@ if(isset($_GET['wechatid'])){
 }elseif(isset($_GET['channel'])){
 	$channelid = intval($_GET['channel']);
 }else{
-	if(!$conf['transfer_wxpay'])sysmsg("未开启微信企业付款");
+	if(!$conf['transfer_wxpay'])sysmsg("未开启微信转账接口");
 	$channelid = $conf['transfer_wxpay'];
 }
 if($wechatid){

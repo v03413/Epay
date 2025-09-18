@@ -23,10 +23,9 @@ $conf = array_merge($conf, $groupconfig);
   <title><?php echo $title?> | <?php echo $conf['sitename']?></title>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
-  <link rel="stylesheet" href="<?php echo $cdnpublic?>twitter-bootstrap/3.3.7/css/bootstrap.min.css" type="text/css" />
-  <link rel="stylesheet" href="<?php echo $cdnpublic?>animate.css/3.5.2/animate.min.css" type="text/css" />
+  <link rel="stylesheet" href="<?php echo $cdnpublic?>twitter-bootstrap/3.4.1/css/bootstrap.min.css" type="text/css" />
+  <link rel="stylesheet" href="<?php echo $cdnpublic?>animate.css/3.7.2/animate.min.css" type="text/css" />
   <link rel="stylesheet" href="<?php echo $cdnpublic?>font-awesome/4.7.0/css/font-awesome.min.css" type="text/css" />
-  <link rel="stylesheet" href="<?php echo $cdnpublic?>simple-line-icons/2.4.1/css/simple-line-icons.min.css" type="text/css" />
   <link rel="stylesheet" href="./assets/css/font.css" type="text/css" />
   <link rel="stylesheet" href="./assets/css/app.css" type="text/css" />
   <link rel="stylesheet" href="../assets/css/bootstrap-table.css?v=1"/>
@@ -121,7 +120,7 @@ $conf = array_merge($conf, $groupconfig);
                   <span class="font-bold">用户中心</span>
                 </a>
               </li>
-              <li class="<?php echo checkIfActive('userinfo,editinfo,certificate')?>">
+              <li class="<?php echo checkIfActive('userinfo,editinfo,certificate,deposit')?>">
                 <a href class="auto">      
                   <span class="pull-right text-muted">
                     <i class="fa fa-fw fa-angle-right text"></i>
@@ -150,6 +149,13 @@ $conf = array_merge($conf, $groupconfig);
 				  <li>
                     <a href="certificate.php">
                       <span>实名认证</span>
+                    </a>
+                  </li>
+				  <?php }?>
+          <?php if($conf['user_deposit']>0){?>
+				  <li>
+                    <a href="deposit.php">
+                      <span>保证金</span>
                     </a>
                   </li>
 				  <?php }?>
@@ -218,6 +224,14 @@ $conf = array_merge($conf, $groupconfig);
                 </a>
               </li>
 			  <?php }?>
+        <?php if($conf['mchrisk_open']==1){?>
+              <li class="<?php echo checkIfActive('mchrisk')?>">
+                <a href="mchrisk.php">
+                  <i class="fa fa-asterisk fa-fw"></i>
+                  <span>商户违规记录</span>
+                </a>
+              </li>
+			  <?php }?>
               <li class="line dk hidden-folded"></li>
 
               <li class="hidden-folded padder m-t m-b-sm text-muted text-xs">          
@@ -231,7 +245,7 @@ $conf = array_merge($conf, $groupconfig);
                 </a>
               </li>
 			  <?php }?>
-        <?php if($conf['onecode']==1){?>
+        <?php if($conf['onecode']==1 || $userrow['open_code'] == 1){?>
               <li class="<?php echo checkIfActive('onecode')?>">
                 <a href="onecode.php">
                   <i class="fa fa-qrcode fa-fw"></i>

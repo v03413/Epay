@@ -21,40 +21,50 @@ class Wxpay implements IProfitSharing
 	}
 
     //请求分账
-    public function submit($trade_no, $api_trade_no, $account, $name, $money){
-        $type = self::get_wxpay_account_type($account);
+    public function submit($trade_no, $api_trade_no, $order_money, $info){
+        global $conf;
+        $receivers = [];
+        $allmoney = 0;
+        $rdata = [];
+        foreach($info as $receiver){
+            $money = round(floor($order_money * $receiver['rate']) / 100, 2);
+            $type = self::get_wxpay_account_type($receiver['account']);
+            if($this->ecommerce){
+                $receivers[] = [
+                    'type' => $type,
+                    'receiver_account' => $receiver['account'],
+                    'amount' => intval(round($money*100)),
+                    'description' => $conf['profits_desc']?$conf['profits_desc']:'订单分账'
+                ];
+            }else{
+                $receivers[] = [
+                    'type' => $type,
+                    'account' => $receiver['account'],
+                    'amount' => intval(round($money*100)),
+                    'description' => $conf['profits_desc']?$conf['profits_desc']:'订单分账'
+                ];
+            }
+            $allmoney += $money;
+            $rdata[] = ['account'=>$receiver['account'], 'money'=>$money];
+        }
         if($this->ecommerce){
             $param = [
                 'transaction_id' => $api_trade_no,
                 'out_order_no' => $trade_no,
-                'receivers' => [
-                    [
-                        'type' => $type,
-                        'receiver_account' => $account,
-                        'amount' => intval(round($money*100)),
-                        'description' => '订单分账'
-                    ]
-                ],
+                'receivers' => $receivers,
                 'finish' => true,
             ];
         }else{
             $param = [
                 'transaction_id' => $api_trade_no,
                 'out_order_no' => $trade_no,
-                'receivers' => [
-                    [
-                        'type' => $type,
-                        'account' => $account,
-                        'amount' => intval(round($money*100)),
-                        'description' => '订单分账'
-                    ]
-                ],
+                'receivers' => $receivers,
                 'unfreeze_unsplit' => true,
             ];
         }
         try{
             $result = $this->service->submit($param);
-            return ['code'=>0, 'msg'=>'请求分账成功', 'settle_no'=>$result['order_id']];
+            return ['code'=>0, 'msg'=>'请求分账成功', 'settle_no'=>$result['order_id'], 'money'=>round($allmoney, 2), 'rdata'=>$rdata];
         } catch (Exception $e) {
             return ['code'=>-1, 'msg'=>$e->getMessage()];
         }
@@ -94,8 +104,35 @@ class Wxpay implements IProfitSharing
     }
 
     //分账回退
-    public function return($trade_no, $api_trade_no, $account, $money){
-        return ['code'=>-1,'msg'=>'分账到个人账户不支持回退'];
+    public function return($trade_no, $api_trade_no, $rdata){
+        $i = 1;
+        $success = 0;
+        $errmsg = null;
+        foreach($rdata as $receiver){
+            $type = self::get_wxpay_account_type($receiver['account']);
+            if($type == 'MERCHANT_ID'){
+                $params = [
+                    'out_order_no' => $trade_no,
+                    'out_return_no' => 'REF'.$trade_no.$i++,
+                    'return_mchid' => $receiver['account'],
+                    'amount' => intval(round($receiver['money']*100)),
+                    'description' => '分账回退'
+                ];
+                try{
+                    $this->service->return($params);
+                    $success++;
+                } catch (Exception $e) {
+                    $errmsg = $e->getMessage();
+                }
+            }else{
+                $errmsg = '分账到个人账户不支持回退';
+            }
+        }
+        if($success > 0 || $errmsg == null){
+            return ['code'=>0, 'msg'=>'分账回退成功'];
+        }else{
+            return ['code'=>-1, 'msg'=>$errmsg];
+        }
     }
 
     //添加分账接收方

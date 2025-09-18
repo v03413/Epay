@@ -33,19 +33,20 @@ class alipayrp_plugin
 	static public function submit(){
 		global $siteurl, $channel, $order, $submit2;
 
-		if(checkwechat()){
-			if(!$submit2){
-				return ['type'=>'jump','url'=>'/pay/submit/'.TRADE_NO.'/'];
-			}
-			return ['type'=>'page','page'=>'wxopen'];
+		if(checkalipay()){
+			return ['type'=>'jump','url'=>'/pay/pagepay/'.TRADE_NO.'/?d=1'];
+		}else{
+			return ['type'=>'jump','url'=>'/pay/qrcode/'.TRADE_NO.'/'];
 		}
-
-		return ['type'=>'jump','url'=>'/pay/qrcode/'.TRADE_NO.'/'];
 	}
 
 	static public function mapi(){
-
-		return ['type'=>'jump','url'=>'/pay/qrcode/'.TRADE_NO.'/'];
+		global $mdevice;
+		if($mdevice=='alipay'){
+			return ['type'=>'jump','url'=>'/pay/pagepay/'.TRADE_NO.'/?d=1'];
+		}else{
+			return self::qrcode();
+		}
 	}
 
 	static private function getPayee(){
@@ -73,26 +74,12 @@ class alipayrp_plugin
 		global $siteurl, $channel, $order, $ordername, $conf, $clientip;
 		
 		$alipay_config = require(PAY_ROOT.'inc/config.php');
-		$redirect_uri = (is_https() ? 'https://' : 'http://').$_SERVER['HTTP_HOST'].$_SERVER['REQUEST_URI'];
-		try{
-			$oauth = new \Alipay\AlipayOauthService($alipay_config);
-			if(isset($_GET['auth_code'])){
-				$result = $oauth->getToken($_GET['auth_code']);
-				if(!empty($result['user_id'])){
-					$openid = $result['user_id'];
-					$openid_type = 'userid';
-				}else{
-					$openid = $result['open_id'];
-					$openid_type = 'openid';
-				}
-			}else{
-				$oauth->oauth($redirect_uri);
-			}
-		}catch(Exception $e){
-			return ['type'=>'error','msg'=>'支付宝快捷登录失败！'.$e->getMessage()];
+		[$user_type, $user_id] = alipay_oauth($alipay_config);
+		if($user_type == 'openid'){
+			return ['type'=>'error','msg'=>'支付宝快捷登录获取uid失败，需将用户标识切换到uid模式'];
 		}
 		
-		$blocks = checkBlockUser($openid, TRADE_NO);
+		$blocks = checkBlockUser($user_id, TRADE_NO);
 		if($blocks) return $blocks;
 
 		$alipay_config['notify_url'] = $conf['localurl'].'pay/notify/'.TRADE_NO.'/';
@@ -102,7 +89,7 @@ class alipayrp_plugin
 			'product_code' => 'STD_RED_PACKET',
 			'biz_scene' => 'PERSONAL_PAY',
 			'order_title' => $ordername,
-			'business_params' => json_encode(['sub_biz_scene'=>'REDPACKET','payer_binded_alipay_uid'=>$openid], JSON_UNESCAPED_UNICODE)
+			'business_params' => json_encode(['sub_biz_scene'=>'REDPACKET','payer_binded_alipay_uid'=>$user_id], JSON_UNESCAPED_UNICODE)
 		];
 		try{
 			$aop = new \Alipay\AlipayTradeService($alipay_config);

@@ -1,5 +1,4 @@
 <?php
-if(preg_match('/Baiduspider/', $_SERVER['HTTP_USER_AGENT']))exit;
 $nosession = true;
 require './includes/common.php';
 
@@ -35,6 +34,19 @@ if($_GET['do']=='settle'){
 			if($group['settle_open'] == 2) continue;
 		}elseif($conf['settle_open']!=1 && $conf['settle_open']!=3) continue;
 		if(isset($group['settle_rate'])) $settle_rate = $group['settle_rate'];
+		if($row['remain_money'] > 0){
+			if(strpos($row['remain_money'], '%') !== false){
+				$remain_rate = floatval(str_replace('%', '', $row['remain_money']));
+				if($remain_rate > 0 && $remain_rate < 100){
+					$row['money'] = round($row['money'] * (1 - $remain_rate / 100), 2);
+				}else{
+					$row['money'] = round($row['money'] - $row['remain_money'], 2);
+				}
+			}else{
+				$row['money'] = round($row['money'] - $row['remain_money'], 2);
+			}
+		}
+		if($row['money']<$conf['settle_money']) continue;
 		if($settle_rate>0){
 			$fee=round($row['money']*$settle_rate/100,2);
 			if(!empty($conf['settle_fee_min']) && $fee<$conf['settle_fee_min'])$fee=$conf['settle_fee_min'];
@@ -54,7 +66,26 @@ if($_GET['do']=='settle'){
 }
 elseif($_GET['do']=='order'){
 	$order_time=getSetting('order_time', true);
-	if(strtotime($order_time)>=strtotime(date("Y-m-d").' 00:00:00'))exit('订单统计与清理任务今日已完成');
+	if(strtotime($order_time)>=strtotime(date("Y-m-d").' 00:00:00')){
+		echo '订单统计与清理任务今日已完成';
+		if($conf['wxnotice_tpl_balance'] || $conf['msgconfig_balance']){
+			$rs=$DB->query("SELECT * from pre_user where status=1");
+			$i=0;
+			while($row = $rs->fetch())
+			{
+				$row['msgconfig'] = unserialize($row['msgconfig']);
+				if($row['msgconfig']['balance'] > 0 && $row['msgconfig']['balance_money'] > 0 && $row['money'] < $row['msgconfig']['balance_money']){
+					$day = $CACHE->read('balance_notice_'.$row['uid']);
+					if($day && $day == date('Ymd')) continue;
+					\lib\MsgNotice::send('balance', $row['uid'], ['user'=>$row['uid'], 'time'=>date('Y-m-d H:i:s'), 'money'=>$row['money']]);
+					$CACHE->save('balance_notice_'.$row['uid'], date('Ymd'), 86400);
+					$i++;
+				}
+			}
+			if($i > 0) echo '，余额不足提醒已发送给'.$i.'位商户';
+		}
+		exit;
+	}
 
 	$thtime=date("Y-m-d H:i:s",time()-3600*24);
 
@@ -128,6 +159,34 @@ elseif($_GET['do']=='order'){
 	saveSetting('order_time', $date);
 
 	$DB->exec("update pre_channel set daystatus=0");
+
+	if($conf['invite_mode'] == 1){
+		$moneylist = $DB->getAll("SELECT uid,SUM(realmoney) money FROM pre_order WHERE status=1 AND `date`='$lastday' GROUP BY uid");
+		foreach($moneylist as $row){
+			$upid = $DB->findColumn('user', 'upid', ['uid'=>$row['uid']]);
+			if($upid > 0){
+				$upgid = $DB->findColumn('user', 'gid', ['uid'=>$upid]);
+				$groupconfig = getGroupConfig($upgid);
+				$conf_n = array_merge($conf, $groupconfig);
+				if($conf_n['invite_open'] == 1 && !empty($conf_n['invite_rate'])){
+					$invite_money = round($row['money'] * $conf_n['invite_rate'] / 100, 2);
+					if($invite_money > 0){
+						changeUserMoney($upid, $invite_money, true, '邀请返现', $row['uid']);
+					}
+				}
+			}
+		}
+	}
+
+	$expire_users = $DB->getAll("SELECT uid,gid,status,endtime FROM pre_user WHERE gid>0 AND endtime>0 AND endtime<NOW()");
+	foreach($expire_users as $row){
+		$group = $DB->getRow("SELECT * FROM pre_group WHERE gid='{$row['gid']}'");
+		$gid = $group['orig'] > 0 ? $group['orig'] : 0;
+		$DB->exec("UPDATE pre_user SET gid={$gid},endtime=NULL WHERE uid='{$row['uid']}'");
+		if($row['status'] == 1){
+			\lib\MsgNotice::send('group', $row['uid'], ['uid'=>$row['uid'], 'group'=>$group['name'], 'endtime'=>$row['endtime']]);
+		}
+	}
 	exit($day.'订单统计与清理任务执行成功');
 }
 elseif($_GET['do']=='notify'){
@@ -158,6 +217,27 @@ elseif($_GET['do']=='notify'){
 			echo $srow['trade_no'].' 重新通知成功<br/>';
 		}else{
 			echo $srow['trade_no'].' 重新通知失败（第'.$notify.'次）<br/>';
+			if($conf['auto_check_notify'] == 1){
+				$count = intval($conf['check_notify_count']);
+				if($count > 0){
+					$userrow = $DB->find('user', 'uid,email,pay', ['uid'=>$srow['uid']]);
+					if($userrow['pay'] == 1){
+						$orders = $DB->getAll("SELECT trade_no FROM pre_order WHERE uid='{$srow['uid']}' and status>0 order by trade_no desc limit {$count}");
+						$failcount = 0;
+						foreach($orders as $order){
+							if($order['notify'] > 0) $failcount++;
+						}
+						if($failcount >= $count){
+							$DB->exec("UPDATE pre_user SET pay=0 WHERE uid='{$srow['uid']}'");
+							echo 'UID:'.$srow['uid'].' 连续'.$failcount.'个订单通知失败，已关闭支付权限<br/>';
+							$DB->exec("INSERT INTO `pre_risk` (`uid`, `type`, `content`, `date`) VALUES (:uid, 2, :content, NOW())", [':uid'=>$srow['uid'],':content'=>'连续'.$failcount.'个订单']);
+							if($conf['check_notify_notice'] == 1){
+								send_mail($userrow['email'],$conf['sitename'].' - 商户支付权限关闭提醒','尊敬的用户：你的商户ID '.$userrow['uid'].' 因连续'.$failcount.'个订单回调通知失败，已被系统自动关闭支付权限！请自行检查你的网站是否有防CC防火墙、WAF等，导致支付回调拦截。如有疑问请联系网站客服。<br/>----------<br/>'.$conf['sitename'].'<br/>'.date('Y-m-d H:i:s'));
+							}
+						}
+					}
+				}
+			}
 		}
 	}
 	echo 'ok!';
@@ -180,66 +260,12 @@ elseif($_GET['do']=='notify2'){
 }
 elseif($_GET['do']=='profitsharing'){
 	\lib\ProfitSharing\CommUtil::task();
+
+	\lib\Payment::settle_task();
 	echo 'ok!';
 }
 elseif($_GET['do']=='check'){
-	if($conf['auto_check_channel'] == 1){
-		$second = intval($conf['check_channel_second']);
-		$failcount = intval($conf['check_channel_failcount']);
-		if($second==0 || $failcount==0)exit('未开启支付通道检查功能');
-		$channels = $DB->getAll("SELECT * FROM pre_channel WHERE status=1 ORDER BY id ASC");
-		foreach($channels as $channel){
-			$channelid = $channel['id'];
-			$orders=$DB->getAll("SELECT trade_no,status FROM pre_order WHERE addtime>=DATE_SUB(NOW(), INTERVAL {$second} SECOND) AND channel='$channelid' order by trade_no desc limit {$failcount}");
-			if(count($orders)<$failcount)continue;
-			$succount = 0;
-			foreach($orders as $order){
-				if($order['status']>0) $succount++;
-			}
-			if($succount == 0){
-				$DB->exec("UPDATE pre_channel SET status=0 WHERE id='$channelid'");
-				echo '已关闭通道:'.$channel['name'].'<br/>';
-				if($conf['check_channel_notice'] == 1){
-					$mail_name = $conf['mail_recv']?$conf['mail_recv']:$conf['mail_name'];
-					send_mail($mail_name,$conf['sitename'].' - 支付通道自动关闭提醒','尊敬的管理员：支付通道“'.$channel['name'].'”因在'.$second.'秒内连续出现'.$failcount.'个未支付订单，已被系统自动关闭！<br/>----------<br/>'.$conf['sitename'].'<br/>'.date('Y-m-d H:i:s'));
-				}
-			}
-		}
-		echo '支付通道检查任务已完成<br/>';
-	}
-	if($conf['auto_check_sucrate'] == 1){
-		$second = intval($conf['check_sucrate_second']);
-		$count = intval($conf['check_sucrate_count']);
-		$sucrate = floatval($conf['check_sucrate_value']);
-		if($second==0 || $count==0 || $sucrate==0)exit('未开启商户订单成功率检查功能');
-		//统计指定时间内每个商户的总订单数量
-		$user_all_stats_rows=$DB->getAll("SELECT uid,count(*) ordernum FROM pre_order WHERE addtime>=DATE_SUB(NOW(), INTERVAL {$second} SECOND) GROUP BY uid");
-		//统计指定时间内每个商户的成功订单数量
-		$user_suc_stats_rows=$DB->getAll("SELECT uid,count(*) ordernum FROM pre_order WHERE addtime>=DATE_SUB(NOW(), INTERVAL {$second} SECOND) and status>0 GROUP BY uid");
-		$user_suc_stats = [];
-		foreach($user_suc_stats_rows as $row){
-			if(!$row['uid']) continue;
-			$user_suc_stats[$row['uid']] = $row['ordernum'];
-		}
-		foreach($user_all_stats_rows as $row){
-			if(!$row['uid']) continue;
-			$total_num = intval($row['ordernum']);
-			$succ_num = intval($user_suc_stats[$row['uid']]);
-			$user_rate = round($succ_num * 100 / $total_num, 2);
-			if($total_num >= $count && $user_rate < $sucrate){
-				$userrow = $DB->find('user', 'uid,email,pay', ['uid'=>$row['uid']]);
-				if($userrow['pay'] == 1){
-					$DB->exec("UPDATE pre_user SET pay=0 WHERE uid='{$row['uid']}'");
-					echo 'UID:'.$row['uid'].' 订单成功率'.$user_rate.'%（'.$succ_num.'/'.$total_num.'），已关闭支付权限<br/>';
-					$DB->exec("INSERT INTO `pre_risk` (`uid`, `type`, `content`, `date`) VALUES (:uid, 1, :content, NOW())", [':uid'=>$row['uid'],':content'=>$user_rate.'%（'.$succ_num.'/'.$total_num.'）']);
-					if($conf['check_sucrate_notice'] == 1){
-						send_mail($userrow['email'],$conf['sitename'].' - 商户支付权限关闭提醒','尊敬的用户：你的商户ID '.$userrow['uid'].' 因在'.$second.'秒内订单支付成功率低于'.$sucrate.'%，已被系统自动关闭支付权限！如有疑问请联系网站客服。<br/>当前订单支付成功率：'.$user_rate.'%（总订单数：'.$succ_num.'，成功订单数：'.$total_num.'）<br/>----------<br/>'.$conf['sitename'].'<br/>'.date('Y-m-d H:i:s'));
-					}
-				}
-			}
-		}
-		echo '商户订单成功率检查任务已完成<br/>';
-	}
+	\lib\RiskCheck::execute();
 }
 elseif($_GET['do']=='complain'){
 	$channelid = intval($_GET['channel']);
@@ -316,4 +342,56 @@ elseif($_GET['do']=='plugin'){
 	}catch(Exception $e){
 		echo $e->getMessage();
 	}
+}
+elseif($_GET['do']=='transfer'){
+	if(!$conf['auto_settle_money']) exit('未开启自动结算转账功能');
+	if(!$conf['transfer_alipay']) exit('未设置支付宝转账接口通道');
+	$payee_err_code = [ //收款方原因导致的失败编码
+		'PAYEE_NOT_EXIST','PAYEE_ACCOUNT_STATUS_ERROR','CARD_BIN_ERROR','PAYEE_CARD_INFO_ERROR','PERM_AML_NOT_REALNAME_REV','PAYEE_USER_INFO_ERROR','PAYEE_ACC_OCUPIED','PERMIT_NON_BANK_LIMIT_PAYEE','PAYEE_TRUSTEESHIP_ACC_OVER_LIMIT','PAYEE_ACCOUNT_NOT_EXSIT','PAYEE_USERINFO_STATUS_ERROR','TRUSTEESHIP_RECIEVE_QUOTA_LIMIT','EXCEED_LIMIT_UNRN_DM_AMOUNT','INVALID_CARDNO','RELEASE_USER_FORBBIDEN_RECIEVE','PAYEE_USER_TYPE_ERROR','PAYEE_NOT_RELNAME_CERTIFY','PERMIT_LIMIT_PAYEE',
+
+		'OPENID_ERROR','NAME_MISMATCH','V2_ACCOUNT_SIMPLE_BAN','MONEY_LIMIT','EXCEED_PAYEE_ACCOUNT_LIMIT','PAYEE_ACCOUNT_ABNORMAL','APPID_OR_OPENID_ERR',
+
+		'REALNAME_CHECK_ERROR','RE_USER_NAME_CHECK_ERROR','ERR_TJ_BLACK','USER_FROZEN','TRANSFER_FAIL','TRANSFER_FEE_LIMIT_ERROR',
+
+		'ACCOUNT_FROZEN','REAL_NAME_CHECK_FAIL','NAME_NOT_CORRECT','OPENID_INVALID','TRANSFER_QUOTA_EXCEED','DAY_RECEIVED_QUOTA_EXCEED','MONTH_RECEIVED_QUOTA_EXCEED','DAY_RECEIVED_COUNT_EXCEED','ID_CARD_NOT_CORRECT','ACCOUNT_NOT_EXIST','TRANSFER_RISK','REALNAME_ACCOUNT_RECEIVED_QUOTA_EXCEED','RECEIVE_ACCOUNT_NOT_PERMMIT','PAYEE_ACCOUNT_ABNORMAL','BLOCK_B2C_USERLIMITAMOUNT_BSRULE_MONTH','BLOCK_B2C_USERLIMITAMOUNT_MONTH',
+	];
+
+	$money = $conf['auto_settle_money']; //商户超过此金额自动结算
+	$success=0;
+	$list = $DB->getAll("SELECT * FROM pre_user WHERE status=1 AND settle=1 AND settle_id=1 AND money>'$money' order by uid desc limit 5");
+	foreach($list as $row){
+		$settle_rate = $conf['settle_rate'];
+		$group = getGroupConfig($row['gid']);
+		if(isset($group['settle_open']) && $group['settle_open'] == 2) continue;
+		if(isset($group['settle_rate']) && $group['settle_rate']!=='' && $group['settle_rate']!==null) $settle_rate = $group['settle_rate'];
+		if($settle_rate>0){
+			$fee=round($row['money']*$settle_rate/100,2);
+			if(!empty($conf['settle_fee_max']) && $fee>$conf['settle_fee_max'])$fee=$conf['settle_fee_max'];
+			$realmoney=$row['money']-$fee;
+		}else{
+			$realmoney=$row['money'];
+		}
+		$out_biz_no = date("YmdHis").rand(11111,99999);
+		$channel = \lib\Channel::get($conf['transfer_alipay']);
+		$result = transfer_do('alipay', $channel, $out_biz_no, $row['account'], $row['username'], $realmoney);
+		if($result['code']==0){
+			$data = ['uid'=>$row['uid'], 'type'=>$row['settle_id'], 'account'=>$row['account'], 'username'=>$row['username'], 'money'=>$row['money'], 'realmoney'=>$realmoney, 'addtime'=>'NOW()', 'endtime'=>'NOW()', 'status'=>1, 'transfer_no'=>$out_biz_no, 'transfer_channel'=>$conf['transfer_alipay'], 'transfer_status'=>1, 'transfer_result'=>$result["orderid"], 'transfer_date'=>$result["paydate"]];
+			if($DB->insert('settle', $data)){
+				$success++;
+				changeUserMoney($row['uid'], $row['money'], false, '自动结算');
+				echo '商户'.$row['uid'].'成功结算'.$realmoney.'元，交易号：'.$result["orderid"].'<br/>';
+			}else{
+				echo '商户'.$row['uid'].'成功结算'.$realmoney.'元，但记录插入失败<br/>';
+			}
+		}else{
+			echo '商户'.$row['uid'].'结算'.$realmoney.'元失败：'.$result['msg'].'<br/>';
+			if(!in_array($result['errcode'], $payee_err_code)){
+				$DB->exec("UPDATE pre_channel SET status=0 WHERE id='{$channel['id']}'");
+				echo '已关闭通道:'.$channel['name'].'<br/>';
+				$mail_name = $conf['mail_recv']?$conf['mail_recv']:$conf['mail_name'];
+				send_mail($mail_name,$conf['sitename'].' - 支付通道自动关闭提醒','尊敬的管理员：支付通道“'.$channel['name'].'”因自动结算转账失败，已被系统自动关闭！<br/>----------<br/>'.$conf['sitename'].'<br/>'.date('Y-m-d H:i:s'));
+			}
+		}
+	}
+	echo '成功结算'.$success.'个商户<br/>';
 }

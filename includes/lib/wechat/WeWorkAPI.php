@@ -30,7 +30,7 @@ class WeWorkAPI
             $secret = $row['appsecret'];
             $url = "https://qyapi.weixin.qq.com/cgi-bin/gettoken?corpid=".$corpId."&corpsecret=".$secret;
             $output = get_curl($url);
-		    $res = json_decode($output, true);
+            $res = json_decode($output, true);
             if (isset($res['access_token'])) {
                 $this->accessToken = $res['access_token'];
                 $expire_time = time() + $res['expires_in'];
@@ -44,7 +44,7 @@ class WeWorkAPI
             return $this->accessToken;
         }catch(Exception $e){
             $DB->rollback();
-		    throw $e;
+            throw $e;
         }
     }
 
@@ -173,5 +173,56 @@ class WeWorkAPI
         $param = ['head_content'=>$head_content, 'list'=>$list];
         if($tail_content) $param['tail_content'] = $tail_content;
         return $this->sendWelcomeMsg($code, 'msgmenu', $param);
+    }
+    
+    public function connect($appid, $callback, $agentid){
+        $url = 'https://open.weixin.qq.com/connect/oauth2/authorize';
+        $param = [
+            "appid" => $appid,
+            "redirect_uri" => $callback,
+            "response_type" => "code",
+            "scope" => "snsapi_base",
+            "agentid" => $agentid
+        ];
+
+        $url .= '?'.http_build_query($param)."#wechat_redirect";
+        header("Location: ".$url);
+        exit;
+    }
+
+    public function get_userinfo($code){
+        $accessToken = $this->getAccessToken();
+        $url = 'https://qyapi.weixin.qq.com/cgi-bin/auth/getuserinfo';
+        $param = [
+            "access_token" => $accessToken,
+            "code" => $code
+        ];
+
+        $url .= '?'.http_build_query($param);
+        $response = get_curl($url);
+        $arr = json_decode($response, true);
+        if(isset($arr['errcode']) && $arr['errcode'] == 0){
+            return $arr;
+        }else{
+            throw new Exception('获取用户信息失败 ['.$arr['errcode'].']'.$arr['errmsg']);
+        }
+    }
+
+    public function send_message($touser, $agentid, $msgtype, $msgparam){
+        $accessToken = $this->getAccessToken();
+        $url = 'https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token='.$accessToken;
+        $post = [
+            'touser' => $touser,
+            'agentid' => intval($agentid),
+            'msgtype' => $msgtype
+        ];
+        $post[$msgtype] = $msgparam;
+        $response = get_curl($url, json_encode($post));
+        $result = json_decode($response, true);
+        if ($result['errcode'] == 0) {
+            return true;
+        }else{
+            throw new Exception('发送消息失败：'.$result['errmsg']);
+        }
     }
 }

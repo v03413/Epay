@@ -89,7 +89,7 @@ class CryptoProcessor
     }
 
     /**获取签名  商户证书签名
-     * @return Base64string
+     * @return string
      */
     public function getSignedData(string $originalData,string $salt):string {
         $originalDataPath = $this->temp_path . 'origdata_' . $salt . '.txt';

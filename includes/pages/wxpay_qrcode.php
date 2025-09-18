@@ -22,7 +22,7 @@ if(!defined('IN_PLUGIN'))exit();
 <div class="order">
 </div>
 <div class="mobile-tip" style="display: none;">提示：二维码会风控，请复制下方链接支付</div>
-<div class="amount">￥<?php echo $order['realmoney']?></div>
+<div class="amount">¥<?php echo $order['realmoney']?></div>
 <div class="qr-image" id="qrcode">
 </div>
 <div class="mobile-btn" style="display: none;">
@@ -62,7 +62,7 @@ if(!defined('IN_PLUGIN'))exit();
 </div>
 </div>
 <script src="<?php echo $cdnpublic?>jquery/1.12.4/jquery.min.js"></script>
-<script src="<?php echo $cdnpublic?>layer/3.1.1/layer.min.js"></script>
+<script src="<?php echo $cdnpublic?>layer/3.1.1/layer.js"></script>
 <script src="<?php echo $cdnpublic?>jquery.qrcode/1.0/jquery.qrcode.min.js"></script>
 <script src="<?php echo $cdnpublic?>clipboard.js/1.7.1/clipboard.min.js"></script>
 <script>

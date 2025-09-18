@@ -43,7 +43,7 @@ class Plugin {
 			$trade_no = $matchs[2];
 			
 			$order = $DB->getRow("SELECT A.*,B.name typename,B.showname typeshowname FROM pre_order A left join pre_type B on A.type=B.id WHERE trade_no=:trade_no limit 1", [':trade_no'=>$trade_no]);
-			$userrow = $DB->find('user', 'ordername,channelinfo', ['uid'=>$order['uid']]);
+			$userrow = $DB->find('user', 'gid,ordername,channelinfo', ['uid'=>$order['uid']]);
             if (!$order) {
 				$channelinfo = $userrow?$userrow['channelinfo']:null;
 				$channel = \lib\Channel::get($trade_no, $channelinfo);
@@ -57,7 +57,10 @@ class Plugin {
 	
 				if(!empty($userrow['ordername']))$conf['ordername']=$userrow['ordername'];
 				$ordername = !empty($conf['ordername'])?ordername_replace($conf['ordername'],$order['name'],$order['uid'],$trade_no,$order['out_trade_no']):$order['name'];
+				$order['plugin'] = $channel['plugin'];
 			}
+			$groupconfig = getGroupConfig($userrow['gid']);
+			$conf = array_merge($conf, $groupconfig);
 
 			$result = self::loadClass($channel['plugin'], $func, $trade_no);
 			if($func == 'submit') {
@@ -164,7 +167,42 @@ class Plugin {
 					return false;
 				}
 			}else{
-				$message = '当前支付通道不支持API退款';
+				$message = '当前支付插件不支持API退款';
+				return false;
+			}
+		}else{
+			$message = '支付插件不存在';
+			return false;
+		}
+	}
+
+	static public function close($trade_no, &$message){
+		global $order,$channel,$DB;
+		if(!preg_match('/^(.[0-9]+)$/',$trade_no))return false;
+		$channel = $order['subchannel'] > 0 ? \lib\Channel::getSub($order['subchannel']) : \lib\Channel::get($order['channel'], $DB->findColumn('user', 'channelinfo', ['uid'=>$order['uid']]));
+		if(!$channel){
+			$message = '当前支付通道信息不存在';
+			return false;
+		}
+		$filename = PLUGIN_ROOT.$channel['plugin'].'/'.$channel['plugin'].'_plugin.php';
+		$classname = '\\'.$channel['plugin'].'_plugin';
+		$func = 'close';
+		if($order['combine'] == 1) $func = 'close_combine';
+		if(file_exists($filename)){
+			include $filename;
+			if (class_exists($classname, false) && method_exists($classname, $func)) {
+				if(!defined("IN_PLUGIN")) define("IN_PLUGIN", true);
+				define("PAY_ROOT", PLUGIN_ROOT.$channel['plugin'].'/');
+				define("TRADE_NO", $trade_no);
+				$result = $classname::$func($order);
+				if($result && $result['code']==0){
+					return true;
+				}else{
+					$message = $result['msg'];
+					return false;
+				}
+			}else{
+				$message = '当前支付插件不支持关闭订单';
 				return false;
 			}
 		}else{

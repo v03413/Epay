@@ -27,7 +27,7 @@ $codename = !empty($userrow['codename'])?$userrow['codename']:$userrow['username
     </div>
     <div class="weui-msg__text-area">
         <h2 class="weui-msg__title">支付成功</h2>
-		<h2 class="weui-msg__title"><span style="font-size:38px;font-weight:700;color:#f40;">￥<?php echo $row['money']?></span></h2>
+		<h2 class="weui-msg__title"><span style="font-size:38px;font-weight:700;color:#f40;">¥<?php echo $row['money']?></span></h2>
 		<div class="weui-msg__custom-area">
 			<div class="weui-cells">
 			  <div class="weui-cell weui-cell_example">

@@ -2,6 +2,8 @@
 
 namespace Alipay;
 
+use Exception;
+
 /**
  * 支付宝转账服务类
  * @see https://opendocs.alipay.com/open/309/106235
@@ -9,24 +11,25 @@ namespace Alipay;
 class AlipayTransferService extends AlipayService
 {
     /**
-     * @param $config 支付宝配置信息
+     * @param array $config 支付宝配置信息
      */
-    public function __construct($config)
+    public function __construct(array $config)
     {
         parent::__construct($config);
     }
 
-    /**
-     * 转账到支付宝账号
-     * @param $out_biz_no 商户转账唯一订单号
-     * @param $amount 转账金额
-     * @param $is_userid 收款方是否支付宝userid（0支付宝账号,1支付宝UID,2支付宝openid）
-     * @param $payee_account 收款方账户
-     * @param $payee_real_name 收款方姓名
-     * @param $payer_show_name 付款方显示姓名
-     * @return mixed {"out_biz_no":"商户订单号","order_id":"支付宝转账订单号","pay_fund_order_id":"支付宝支付资金流水号","status":"SUCCESS","trans_date":"订单支付时间"}
-     */
-    public function transferToAccount($out_biz_no, $amount, $is_userid, $payee_account, $payee_real_name, $payer_show_name)
+	/**
+	 * 转账到支付宝账号
+	 * @param string $out_biz_no 商户转账唯一订单号
+	 * @param numeric $amount 转账金额
+	 * @param int $is_userid 收款方是否支付宝userid（0支付宝账号,1支付宝UID,2支付宝openid）
+	 * @param string $payee_account 收款方账户
+	 * @param string $payee_real_name 收款方姓名
+	 * @param string $payer_show_name 付款方显示姓名
+	 * @return mixed {"out_biz_no":"商户订单号","order_id":"支付宝转账订单号","pay_fund_order_id":"支付宝支付资金流水号","status":"SUCCESS","trans_date":"订单支付时间"}
+	 * @throws Exception
+	 */
+    public function transferToAccount(string $out_biz_no, $amount, int $is_userid, string $payee_account, string $payee_real_name, string $payer_show_name)
     {
         if ($this->isCertMode) {
             $apiName = 'alipay.fund.trans.uni.transfer';
@@ -42,6 +45,7 @@ class AlipayTransferService extends AlipayService
                 'biz_scene' => 'DIRECT_TRANSFER',
                 'order_title' => $payer_show_name, //付款方显示名称
                 'payee_info' => array('identity' => $payee_account, 'identity_type' => $payee_type),
+                'business_params' => json_encode(['payer_show_name_use_alias'=>'true']),
             ];
             if(!empty($payee_real_name))$bizContent['payee_info']['name'] = $payee_real_name; //收款方真实姓名
         } else {
@@ -62,16 +66,17 @@ class AlipayTransferService extends AlipayService
         return $result;
     }
 
-    /**
-     * 转账到银行卡账户
-     * @param $out_biz_no 商户转账唯一订单号
-     * @param $amount 转账金额
-     * @param $payee_account 收款方账户
-     * @param $payee_real_name 收款方姓名
-     * @param $payer_show_name 付款方显示姓名
-     * @return mixed {"out_biz_no":"商户订单号","order_id":"支付宝转账订单号","pay_fund_order_id":"支付宝支付资金流水号","status":"SUCCESS","trans_date":"订单支付时间"}
-     */
-    public function transferToBankCard($out_biz_no, $amount, $payee_account, $payee_real_name, $payer_show_name)
+	/**
+	 * 转账到银行卡账户
+	 * @param string $out_biz_no 商户转账唯一订单号
+	 * @param numeric $amount 转账金额
+	 * @param string $payee_account 收款方账户
+	 * @param string $payee_real_name 收款方姓名
+	 * @param string $payer_show_name 付款方显示姓名
+	 * @return mixed {"out_biz_no":"商户订单号","order_id":"支付宝转账订单号","pay_fund_order_id":"支付宝支付资金流水号","status":"SUCCESS","trans_date":"订单支付时间"}
+	 * @throws Exception
+	 */
+    public function transferToBankCard(string $out_biz_no, $amount, string $payee_account, string $payee_real_name, string $payer_show_name)
     {
         $apiName = 'alipay.fund.trans.uni.transfer';
         $bizContent = [
@@ -92,14 +97,15 @@ class AlipayTransferService extends AlipayService
         return $this->aopExecute($apiName, $bizContent);
     }
 
-    /**
-     * 转账单据查询
-     * @param $order_id 订单号
-     * @param $type 订单号类型(0=支付宝转账单据号,1=支付宝支付资金流水号,2=商户转账唯一订单号)
-     * @param $code 产品类型(0=转账到支付宝账户,1=转账到银行卡)
-     * @return mixed {"order_id":"支付宝转账单据号","pay_fund_order_id":"支付宝支付资金流水号","out_biz_no":"商户转账唯一订单号","trans_amount":1,"status":"SUCCESS","pay_date":"支付时间","error_code":"PAYEE_CARD_INFO_ERROR","fail_reason":"收款方银行卡信息有误"}
-     */
-    public function query($order_id, $type=0, $code = 0)
+	/**
+	 * 转账单据查询
+	 * @param string $order_id 订单号
+	 * @param int $type 订单号类型(0=支付宝转账单据号,1=支付宝支付资金流水号,2=商户转账唯一订单号)
+	 * @param int $code 产品类型(0=转账到支付宝账户,1=转账到银行卡)
+	 * @return mixed {"order_id":"支付宝转账单据号","pay_fund_order_id":"支付宝支付资金流水号","out_biz_no":"商户转账唯一订单号","trans_amount":1,"status":"SUCCESS","pay_date":"支付时间","error_code":"PAYEE_CARD_INFO_ERROR","fail_reason":"收款方银行卡信息有误"}
+	 * @throws Exception
+	 */
+    public function query(string $order_id, int $type=0, int $code = 0)
     {
         $apiName = 'alipay.fund.trans.common.query';
         $bizContent = [];
@@ -117,13 +123,14 @@ class AlipayTransferService extends AlipayService
         return $this->aopExecute($apiName, $bizContent);
     }
 
-    /**
-     * 账户余额查询
-     * @param $alipay_user_id 支付宝用户ID
-     * @param $user_type 用户标识类型（0支付宝UID,1支付宝openid）
-     * @return mixed {"available_amount":"账户可用余额","freeze_amount":"实时冻结余额"}
-     */
-    public function accountQuery($alipay_user_id, $user_type = 0)
+	/**
+	 * 账户余额查询
+	 * @param string $alipay_user_id 支付宝用户ID
+	 * @param int $user_type 用户标识类型（0支付宝UID,1支付宝openid）
+	 * @return mixed {"available_amount":"账户可用余额","freeze_amount":"实时冻结余额"}
+	 * @throws Exception
+	 */
+    public function accountQuery(string $alipay_user_id = null, int $user_type = 0)
     {
         $apiName = 'alipay.fund.account.query';
         if($user_type == 1){
@@ -140,16 +147,17 @@ class AlipayTransferService extends AlipayService
         return $this->aopExecute($apiName, $bizContent);
     }
 
-    /**
-     * 现金红包转账接口
-     * @param $out_biz_no 商户转账唯一订单号
-     * @param $amount 转账金额
-     * @param $user_id 收款方账户
-     * @param $order_title 转账业务的标题
-     * @param $original_order_id 原支付宝业务单号
-     * @return mixed {"out_biz_no":"商户订单号","order_id":"支付宝转账订单号","pay_fund_order_id":"支付宝支付资金流水号","status":"SUCCESS","trans_date":"订单支付时间"}
-     */
-    public function redPacketTansfer($out_biz_no, $amount, $user_id, $order_title, $original_order_id = null)
+	/**
+	 * 现金红包转账接口
+	 * @param string $out_biz_no 商户转账唯一订单号
+	 * @param numeric $amount 转账金额
+	 * @param string $user_id 收款方账户
+	 * @param string $order_title 转账业务的标题
+	 * @param null $original_order_id 原支付宝业务单号
+	 * @return mixed {"out_biz_no":"商户订单号","order_id":"支付宝转账订单号","pay_fund_order_id":"支付宝支付资金流水号","status":"SUCCESS","trans_date":"订单支付时间"}
+	 * @throws Exception
+	 */
+    public function redPacketTansfer(string $out_biz_no, $amount, string $user_id, string $order_title, $original_order_id = null)
     {
         $apiName = 'alipay.fund.trans.uni.transfer';
         $bizContent = [
@@ -162,19 +170,19 @@ class AlipayTransferService extends AlipayService
             'business_params' => json_encode(['sub_biz_scene'=>'REDPACKET'], JSON_UNESCAPED_UNICODE)
         ];
         if($original_order_id) $bizContent['original_order_id'] = $original_order_id;
-    
-        $result = $this->aopExecute($apiName, $bizContent);
-        return $result;
+
+	    return $this->aopExecute($apiName, $bizContent);
     }
 
-    /**
-     * 红包资金退回接口
-     * @param $out_request_no 标识一次资金退回请求
-     * @param $order_id 发红包时支付宝返回的支付宝订单号
-     * @param $refund_amount 需要退款的金额
-     * @return mixed {"refund_order_id":"退款的支付宝系统内部单据id","order_id":"发红包时支付宝返回的支付宝订单号","out_request_no":"标识一次资金退回请求","status":"SUCCESS","refund_amount":"本次退款的金额","refund_date":"时间"}
-     */
-    public function redPacketRefund($out_request_no, $order_id, $refund_amount)
+	/**
+	 * 红包资金退回接口
+	 * @param string $out_request_no 标识一次资金退回请求
+	 * @param string $order_id 发红包时支付宝返回的支付宝订单号
+	 * @param numeric $refund_amount 需要退款的金额
+	 * @return mixed {"refund_order_id":"退款的支付宝系统内部单据id","order_id":"发红包时支付宝返回的支付宝订单号","out_request_no":"标识一次资金退回请求","status":"SUCCESS","refund_amount":"本次退款的金额","refund_date":"时间"}
+	 * @throws Exception
+	 */
+    public function redPacketRefund(string $out_request_no, string $order_id, $refund_amount)
     {
         $apiName = 'alipay.fund.trans.refund';
         $bizContent = [
@@ -182,9 +190,8 @@ class AlipayTransferService extends AlipayService
             'out_request_no' => $out_request_no,
             'refund_amount' => $refund_amount,
         ];
-    
-        $result = $this->aopExecute($apiName, $bizContent);
-        return $result;
+
+	    return $this->aopExecute($apiName, $bizContent);
     }
 
 }

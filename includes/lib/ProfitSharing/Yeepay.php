@@ -20,14 +20,20 @@ class Yeepay implements IProfitSharing
 	}
 
     //请求分账
-    public function submit($trade_no, $api_trade_no, $account, $name, $money){
-        $divideDetail = [
-            [
-                'ledgerNo' => $account,
+    public function submit($trade_no, $api_trade_no, $order_money, $info){
+        $divideDetail = [];
+        $allmoney = 0;
+        $rdata = [];
+        foreach($info as $receiver){
+            $money = round(floor($order_money * $receiver['rate']) / 100, 2);
+            $divideDetail[] = [
+                'ledgerNo' => $receiver['account'],
                 'amount' => $money,
                 'ledgerType' => 'MERCHANT2MERCHANT',
-            ]
-        ];
+            ];
+            $allmoney += $money;
+            $rdata[] = ['account'=>$receiver['account'], 'money'=>$money];
+        }
         $params = [
             'parentMerchantNo' => $this->channel['appid'],
 			'merchantNo' => empty($this->channel['appmchid'])?$this->channel['appid']:$this->channel['appmchid'],
@@ -41,9 +47,9 @@ class Yeepay implements IProfitSharing
             $result = $this->service->post('/rest/v1.0/divide/apply', $params);
             if($result['code'] == 'OPR00000'){
                 if($result['status'] == 'SUCCESS'){
-                    return ['code'=>1, 'msg'=>'分账成功', 'settle_no'=>$result['divideRequestId']];
+                    return ['code'=>1, 'msg'=>'分账成功', 'settle_no'=>$result['divideRequestId'], 'money'=>round($allmoney, 2), 'rdata'=>$rdata];
                 }else{
-                    return ['code'=>0, 'msg'=>'请求分账成功', 'settle_no'=>$result['divideRequestId']];
+                    return ['code'=>0, 'msg'=>'请求分账成功', 'settle_no'=>$result['divideRequestId'], 'money'=>round($allmoney, 2), 'rdata'=>$rdata];
                 }
             }else{
                 throw new Exception('['.$result['code'].']'.$result['message']);
@@ -102,7 +108,7 @@ class Yeepay implements IProfitSharing
     }
 
     //分账回退
-    public function return($trade_no, $api_trade_no, $account, $money){
+    public function return($trade_no, $api_trade_no, $rdata){
         return ['code'=>-1, 'msg'=>'暂不支持分账回退'];
         $params = [
             'parentMerchantNo' => $this->channel['appid'],

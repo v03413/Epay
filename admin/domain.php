@@ -23,13 +23,21 @@ if($islogin==1){}else exit("<script language='javascript'>window.location.href='
   <button type="submit" class="btn btn-primary">搜索</button>
   <a href="javascript:addDomain()" class="btn btn-success">添加</a>
   <a href="javascript:searchClear()" class="btn btn-default" title="刷新域名列表"><i class="fa fa-refresh"></i></a>
+  <div class="btn-group" role="group">
+	<button type="button" id="batchAction" class="btn btn-default dropdown-toggle" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">批量操作 <span class="caret"></span></button>
+	<ul class="dropdown-menu">
+		<li><a href="javascript:operation(1)">通过</a></li>
+		<li><a href="javascript:operation(2)">拒绝</a></li>
+		<li><a href="javascript:operation(3)">删除</a></li>
+	</ul>
+  </div>
 </form>
 
       <table id="listTable">
 	  </table>
     </div>
   </div>
-<script src="<?php echo $cdnpublic?>layer/3.1.1/layer.min.js"></script>
+<script src="<?php echo $cdnpublic?>layer/3.1.1/layer.js"></script>
 <script src="../assets/js/bootstrap-table.min.js"></script>
 <script src="../assets/js/bootstrap-table-page-jump-to.min.js"></script>
 <script src="../assets/js/custom.js"></script>
@@ -46,6 +54,10 @@ $(document).ready(function(){
 		pageSize: pageSize,
 		classes: 'table table-striped table-hover table-bordered',
 		columns: [
+			{
+				field: '',
+				checkbox: true
+			},
 			{
 				field: 'id',
 				title: 'ID'
@@ -181,5 +193,37 @@ function delDomain(id) {
 			}
 		});
 	}
+}
+function operation(status){
+	var selected = $('#listTable').bootstrapTable('getSelections');
+	if(selected.length == 0){
+		layer.msg('未选择域名', {time:1500});return;
+	}
+	var checkbox = new Array();
+	$.each(selected, function(key, item){
+		checkbox.push(item.id)
+	})
+	if(status == 3 && !confirm('确定要删除已选中的'+checkbox.length+'个域名吗？')) return;
+	var ii = layer.load(2, {shade:[0.1,'#fff']});
+	$.ajax({
+		type : 'POST',
+		url : 'ajax_user.php?act=domain_operation',
+		data : {status:status, checkbox:checkbox},
+		dataType : 'json',
+		success : function(data) {
+			layer.close(ii);
+			if(data.code == 0){
+				searchSubmit();
+				layer.alert(data.msg);
+			}else{
+				layer.alert(data.msg);
+			}
+		},
+		error:function(data){
+			layer.msg('请求超时');
+			searchSubmit();
+		}
+	});
+	return false;
 }
 </script>
