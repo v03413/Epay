@@ -535,9 +535,6 @@ header .button-header .custom-btn:hover {
 }
 /* 02. Owl Nav
    ==================================== */
-.owl-carousel {
-  cursor: url(../template/index/default/image/drag.png) 16 9, ew-resize;
-}
 .owl-nav {
   position: static;
 }

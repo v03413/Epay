@@ -1,15 +1,15 @@
 <?php
 
 /**
- * @see https://www.yuque.com/hlwl/cziks
+ * @see https://doc.huilianlink.com/
  */
 class HlpayClient
 {
     //接口地址
-    private $gateway_url = 'https://api.hbhlpay.com';
+    private $gateway_url = 'https://api.huilianlink.com';
 
-    //商户编号
-    private $ins_id;
+    //子商户编码
+    private $sub_sn;
 
 	//应用APPID
     private $app_id;
@@ -21,10 +21,11 @@ class HlpayClient
     private $platform_public_key;
 
     private $sign_type = 'RSA2';
+	private $version = '1.01';
 
-    public function __construct($ins_id, $app_id, $merchant_private_key, $platform_public_key)
+    public function __construct($app_id, $merchant_private_key, $platform_public_key, $sub_sn = null)
     {
-        $this->ins_id = $ins_id;
+        $this->sub_sn = $sub_sn;
         $this->app_id = $app_id;
         $this->merchant_private_key = $merchant_private_key;
         $this->platform_public_key = $platform_public_key;
@@ -35,16 +36,21 @@ class HlpayClient
     {
         $requrl = $this->gateway_url . $path;
         $params = [
-            'ins_id' => $this->ins_id,
-            'app_id' => $this->app_id,
-            'sign_type' => $this->sign_type,
-            'timestamp' => time(),
-            'biz_content' => json_encode($bizContent)
+            'appId' => $this->app_id,
+			'subSn' => $this->sub_sn,
+            'timestamp' => time().'',
+			'requestId' => getMillisecond(),
+			'version' => $this->version,
+			'signType' => $this->sign_type,
+            'bizContent' => json_encode($bizContent, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)
         ];
         $params['sign'] = $this->generateSign($params);
-        $response = get_curl($requrl, http_build_query($params));
+        $response = get_curl($requrl, json_encode($params, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES), 0, 0, 0, 0, 0, ['Content-Type: application/json']);
         $result = json_decode($response, true);
-		if(isset($result['code']) && $result['code']==1){
+		if(isset($result['code']) && $result['code']==200){
+            if(!$this->verifySign($result)){
+                throw new Exception('返回数据验签失败');
+            }
 			return $result['data'];
 		}elseif(isset($result['msg'])){
 			throw new Exception($result['msg']);
@@ -59,13 +65,59 @@ class HlpayClient
 		$signstr = '';
 	
 		foreach($param as $k => $v){
-			if($k != "sign" && $v!=='' && $v!==null){
+			if($k != "sign" && !isNullOrEmpty($v)){
 				$signstr .= $k.'='.$v.'&';
 			}
 		}
 		$signstr = substr($signstr,0,-1);
 		return $signstr;
 	}
+
+	// 深度处理data字段（支持JSON字符串解析）
+    private static function processDataField($data) {
+        if (is_string($data)) {
+            $decoded = json_decode($data, true);
+            if (json_last_error() === JSON_ERROR_NONE) {
+                $data = $decoded;
+            }
+        }
+        
+        if (is_array($data)) {
+            $filtered = self::deepFilterParams($data);
+            $sorted = self::deepSortParams($filtered);
+            return json_encode($sorted, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        }
+        
+        return $data;
+    }
+
+    // 深度过滤空值参数（支持多维数组）
+    private static function deepFilterParams(array $params): array {
+        $filtered = [];
+        foreach ($params as $k => $v) {
+            if (isNullOrEmpty($v)) continue;
+
+            // 递归处理数组
+            if (is_array($v)) {
+                $v = self::deepFilterParams($v);
+                if (empty($v)) continue;
+            }
+
+            $filtered[$k] = $v;
+        }
+        return $filtered;
+    }
+
+    // 深度排序参数（支持多维数组）
+    private static function deepSortParams(array $params): array {
+        ksort($params, SORT_STRING);
+        foreach ($params as $k => $v) {
+            if (is_array($v)) {
+                $params[$k] = self::deepSortParams($v);
+            }
+        }
+        return $params;
+    }
 
     //请求参数签名
 	private function generateSign($param){
@@ -75,10 +127,13 @@ class HlpayClient
     //验签方法
 	public function verifySign($param){
 		if(empty($param['sign'])) return false;
+		if (isset($param['data'])) {
+            $param['data'] = self::processDataField($param['data']);
+        }
 		return $this->rsaPubilcSign($this->getSignContent($param), $param['sign']);
 	}
 
-	//应用私钥签名
+	//商户私钥签名
 	private function rsaPrivateSign($data){
 		$priKey = $this->merchant_private_key;
         $res = "-----BEGIN RSA PRIVATE KEY-----\n" .
@@ -86,7 +141,7 @@ class HlpayClient
             "\n-----END RSA PRIVATE KEY-----";
 		$pkeyid = openssl_pkey_get_private($res);
 		if(!$pkeyid){
-			throw new Exception('签名失败，应用私钥不正确');
+			throw new Exception('签名失败，商户私钥不正确');
 		}
 		openssl_sign($data, $signature, $pkeyid, OPENSSL_ALGO_SHA256);
 		$signature = base64_encode($signature);

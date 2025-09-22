@@ -1,5 +1,8 @@
 <?php
 
+/**
+ * https://prodoc.allinpay.com/
+ */
 class PayService
 {
 	private $sign_type = 'RSA';
@@ -18,18 +21,19 @@ class PayService
 	}
 
 	//发起API请求
-	public function submit($requrl, $params){
+	public function submit($requrl, $params, $file = false){
 		$public_params = [
-			'cusid' => $this->cusid,
 			'appid' => $this->appid,
+			'cusid' => $this->cusid,
 			'version' => $this->version,
+			'randomstr' => getSid(),
 			'signtype' => $this->sign_type,
 		];
 
 		$params = array_merge($public_params, $params);
 		$params['sign'] = $this->generateSign($params);
 
-		$response = get_curl($requrl, http_build_query($params));
+		$response = get_curl($requrl, $file ? $params : http_build_query($params));
 		$result = json_decode($response, true);
 		if(isset($result['retcode']) && $result['retcode']=='SUCCESS'){
 			return $result;
@@ -40,6 +44,20 @@ class PayService
 		}
 	}
 
+	//获取收银台参数
+	public function cashier($params){
+		$public_params = [
+			'cusid' => $this->cusid,
+			'appid' => $this->appid,
+			'version' => '12',
+			'randomstr' => getSid(),
+			'signtype' => $this->sign_type,
+		];
+
+		$params = array_merge($public_params, $params);
+		$params['sign'] = $this->generateSign($params);
+		return $params;
+	}
 
 	//获取待签名字符串
 	private function getSignContent($param){
@@ -47,7 +65,7 @@ class PayService
 		$signstr = '';
 	
 		foreach($param as $k => $v){
-			if($k != "sign" && $v!=''){
+			if($k != "sign" && !$v instanceof \CURLFile && $v!=='' && $v!==null){
 				$signstr .= $k.'='.$v.'&';
 			}
 		}

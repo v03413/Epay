@@ -18,7 +18,7 @@ if($islogin==1){}else exit("<script language='javascript'>window.location.href='
     <input type="text" class="form-control" name="value" placeholder="搜索内容">
   </div>
   <div class="form-group">
-	<select name="type" class="form-control"><option value="-1">风控类型</option><option value="0">关键词屏蔽</option><option value="1">订单成功率</option></select>
+	<select name="type" class="form-control"><option value="-1">风控类型</option><option value="0">关键词屏蔽</option><option value="1">订单成功率</option><option value="2">连续通知失败</option><option value="3">订单投诉率</option></select>
   </div>
   <button type="submit" class="btn btn-primary">搜索</button>
   <a href="javascript:searchClear()" class="btn btn-default" title="刷新风控记录"><i class="fa fa-refresh"></i></a>
@@ -28,7 +28,7 @@ if($islogin==1){}else exit("<script language='javascript'>window.location.href='
 	  </table>
     </div>
   </div>
-<script src="<?php echo $cdnpublic?>layer/3.1.1/layer.min.js"></script>
+<script src="<?php echo $cdnpublic?>layer/3.1.1/layer.js"></script>
 <script src="../assets/js/bootstrap-table.min.js"></script>
 <script src="../assets/js/bootstrap-table-page-jump-to.min.js"></script>
 <script src="../assets/js/custom.js"></script>
@@ -65,8 +65,13 @@ $(document).ready(function(){
 				formatter: function(value, row, index) {
 					if(value == 1){
 						return '订单成功率';
+					}else if(value == 2){
+						return '连续通知失败';
+					}else if(value == 3){
+						return '订单投诉率';
+					}else{
+						return '关键词屏蔽';
 					}
-					return '关键词屏蔽';
 				}
 			},
 			{

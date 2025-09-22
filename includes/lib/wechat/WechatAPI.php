@@ -7,6 +7,7 @@ class WechatAPI
 {
     private $wid;
     private $accessToken;
+    private $jsapiTicket;
 
     public function __construct($id)
     {
@@ -84,5 +85,65 @@ class WechatAPI
         }else{
             throw new Exception('模板消息发送失败：'.$res['errmsg']);
         }
+    }
+
+    public function getJsapiTicket($force = false)
+    {
+        global $CACHE;
+        if(!empty($this->jsapiTicket)) return $this->jsapiTicket;
+
+        $cachekey = 'wx_jsapi_ticket_'.$this->wid;
+        $row = $CACHE->read($cachekey);
+        if($row){
+            $row = unserialize($row);
+            if($row['ticket'] && strtotime($row['expiretime']) - 200 >= time() && !$force){
+                $this->jsapiTicket = $row['ticket'];
+                return $this->jsapiTicket;
+            }
+        }
+
+        $access_token = $this->getAccessToken();
+        $url = 'https://api.weixin.qq.com/cgi-bin/ticket/getticket?access_token='.$access_token.'&type=jsapi';
+        $output = get_curl($url);
+        $res = json_decode($output, true);
+        if (isset($res['ticket'])) {
+            $this->jsapiTicket = $res['ticket'];
+            $expire_time = time() + $res['expires_in'];
+            $CACHE->save($cachekey, ['ticket'=>$this->jsapiTicket, 'expiretime'=>date("Y-m-d H:i:s", $expire_time)], $res['expires_in']);
+        }elseif(isset($res['errmsg'])){
+            throw new Exception('JsapiTicket获取失败：'.$res['errmsg']);
+        }else{
+            throw new Exception('JsapiTicket获取失败');
+        }
+    }
+
+    public function getJsapiConfig($appid, $url, $jsApiList, $debug = false)
+    {
+        $ticket = $this->getJsapiTicket();
+        $data = [
+            'jsapi_ticket' => $ticket,
+            'timestamp' => time(),
+            'noncestr' => random(16),
+            'url' => $url
+        ];
+        $config = [
+            'debug' => $debug,
+            'appId' => $appid,
+            'timestamp' => $data['timestamp'],
+            'nonceStr' => $data['noncestr'],
+            'signature' => $this->getSignature($data),
+            'jsApiList' => $jsApiList
+        ];
+        return $config;
+    }
+
+    public function getSignature($data)
+    {
+        ksort($data);
+        $params = array();
+        foreach ($data as $key => $value) {
+            $params[] = "{$key}={$value}";
+        }
+        return sha1(join('&', $params));
     }
 }

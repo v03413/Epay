@@ -120,7 +120,7 @@ $list = $DB->getAll("SELECT * FROM pre_anounce ORDER BY sort ASC");
 <?php }?>
  </div>
 </div>
-<script src="<?php echo $cdnpublic?>layer/3.1.1/layer.min.js"></script>
+<script src="<?php echo $cdnpublic?>layer/3.1.1/layer.js"></script>
 <script src="<?php echo $cdnpublic?>bootstrap-colorpicker/2.5.3/js/bootstrap-colorpicker.min.js"></script>
 <script>
 function setStatus(id,status) {

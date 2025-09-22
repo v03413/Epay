@@ -31,11 +31,11 @@ class Aliyun
 		$replace = ['%20', '%2A', '~'];
 		return str_replace($search, $replace, urlencode($str));
 	}
-	public function send($phone, $code, $moban, $sign, $sitename)
+	public function send($phone, $param, $moban, $sign, $sitename)
 	{
 		if (empty($this->AccessKeyId) || empty($this->AccessKeySecret)) return false;
 		$url = 'https://dysmsapi.aliyuncs.com/';
-		$TemplateParam = json_encode(['code' => $code]);
+		$TemplateParam = json_encode($param);
 		$data = array(
 			'Action' => 'SendSms',
 			'PhoneNumbers' => $phone,

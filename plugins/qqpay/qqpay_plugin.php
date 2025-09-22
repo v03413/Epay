@@ -119,7 +119,7 @@ class qqpay_plugin
 			return ['type'=>'error','msg'=>'QQ钱包支付下单失败！'.$e->getMessage()];
 		}
 		if($method == 'jsapi'){
-			return ['type'=>'jsapi','data'=>$result];
+			return ['type'=>'jsapi','data'=>json_encode($result)];
 		}
 		
 		return ['type'=>'page','page'=>'qqpay_jspay','data'=>$result];
@@ -184,6 +184,7 @@ class qqpay_plugin
 					}elseif($result['trade_state'] != 'USERPAYING'){
 						return ['type'=>'error','msg'=>'QQ钱包支付失败！'.$result['trade_state_desc']];
 					}
+					$retry++;
 				}
 				if($success){
 					processNotify($order, $result['transaction_id'], $result['openid']);
@@ -239,6 +240,22 @@ class qqpay_plugin
 			$result = $client->refund($params);
 			$result = ['code'=>0, 'trade_no'=>$result['transaction_id'], 'refund_fee'=>$result['refund_fee']];
 		} catch(Exception $e) {
+			$result = ['code'=>-1, 'msg'=>$e->getMessage()];
+		}
+		return $result;
+	}
+
+	//关闭订单
+	static public function close($order){
+		global $channel;
+		if(empty($order))exit();
+
+		$qqpay_config = require(PLUGIN_ROOT.'qqpay/inc/config.php');
+		try{
+			$client = new \QQPay\PaymentService($qqpay_config);
+			$client->closeOrder($order['trade_no']);
+			$result = ['code'=>0];
+		} catch (Exception $e) {
 			$result = ['code'=>-1, 'msg'=>$e->getMessage()];
 		}
 		return $result;

@@ -8,7 +8,8 @@ class ApiHelper
     //无需签名验证的接口
     private static $exclude_list = [
         'pay/submit',
-        'pay/create'
+        'pay/create',
+        'complain/image'
     ];
 
     public static function load_api($s){
@@ -70,6 +71,7 @@ class ApiHelper
             if(empty($queryArr['timestamp']))throw new Exception('时间戳(timestamp)字段不能为空');
             if(abs(time() - $queryArr['timestamp']) > 300)throw new Exception('时间戳字段不正确，请检查服务器时间');
         }
-        if(!\lib\Payment::verifySign($queryArr, $userrow['key'], $userrow['publickey']))throw new Exception('RSA签名校验失败');
+        $sign_type = $queryArr['sign_type'] ? $queryArr['sign_type'] : 'MD5';
+        if(!\lib\Payment::verifySign($queryArr, $userrow['key'], $userrow['publickey']))throw new Exception($sign_type.'签名校验失败');
     }
 }

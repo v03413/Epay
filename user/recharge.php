@@ -86,7 +86,7 @@ $_SESSION['csrf_token'] = $csrf_token;
   </div>
 
 <?php include 'foot.php';?>
-<script src="<?php echo $cdnpublic?>layer/3.1.1/layer.min.js"></script>
+<script src="<?php echo $cdnpublic?>layer/3.1.1/layer.js"></script>
 <script>
 function showneed(){
 	var money = parseFloat($("input[name='money']").val());

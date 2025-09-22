@@ -181,8 +181,34 @@ if(strlen($userrow['phone'])==11){
 				 </div>
 				</div>
 
+								
+				<?php if($conf['voicenotice'] == 1){?><div class="line line-dashed b-b line-lg pull-in"></div>
+				<div class="form-group"><div class="col-sm-offset-2 col-sm-4"><h4>云音响设置：</h4></div></div>
+				<div class="form-group">
+					<label class="col-sm-2 control-label">设备端上报API接口</label>
+					<div class="col-sm-9">
+						<input class="form-control" type="text" name="voice_gateway" value="<?php echo $siteurl?>gateway.php" readonly><font color="green">在ini写码配置文件中添加，然后通过写码工具配置到设备中</font>
+					</div>
+				</div>
+				<div class="form-group">
+					<label class="col-sm-2 control-label">设备序列号SN</label>
+					<div class="col-sm-9">
+						<input class="form-control" type="text" name="voice_devid" value="<?php echo $userrow['voice_devid']?>">
+					</div>
+				</div>
+				<div class="form-group">
+					<label class="col-sm-2 control-label">订单语音播报</label>
+					<div class="col-sm-9">
+						<select class="form-control" name="voice_order" default="<?php echo $userrow['voice_order']?>"><option value="0">关闭</option><option value="1">开启</option></select><font color="green">通过聚合收款码收款时的语音播报开关</font>
+					</div>
+				</div>
+				<div class="form-group">
+				  <div class="col-sm-offset-2 col-sm-4"><input type="button" id="editVoice" value="确定修改" class="btn btn-primary form-control"/><br/>
+				 </div>
+				</div><?php }?>
+
 				<div class="line line-dashed b-b line-lg pull-in"></div>
-				<div class="form-group"><div class="col-sm-offset-2 col-sm-4"><h4>联系方式设置：</h4></div></div>
+				<div class="form-group"><div class="col-sm-offset-2 col-sm-4"><h4>联系方式与功能设置：</h4></div></div>
 				<?php if($conf['verifytype']==1){?>
 				<div class="form-group">
 					<label class="col-sm-2 control-label">手机号码</label>
@@ -251,13 +277,32 @@ if(strlen($userrow['phone'])==11){
 						<select class="form-control" name="transfer" default="<?php echo $userrow['transfer']?>"><option value="0">关闭</option><option value="1">开启</option></select>
 					</div>
 				</div><?php }?>
+				<?php if($conf['settle_open']==1 || $conf['settle_open']==3){?>
+				<div class="form-group">
+					<label class="col-sm-2 control-label">预留余额</label>
+					<div class="col-sm-9">
+						<div class="input-group"><input class="form-control" type="text" name="remain_money" value="<?php echo $userrow['remain_money']?>" placeholder="可设置预留部分商户余额不参与每日自动结算，数字后加%即为百分比"><span class="input-group-addon">元</span></div>
+					</div>
+				</div><?php }?>
+				<div class="form-group">
+					<label class="col-sm-2 control-label">最大支付金额限制</label>
+					<div class="col-sm-9">
+						<div class="input-group"><input class="form-control" type="text" name="pay_maxmoney" value="<?php echo $userrow['pay_maxmoney']?>" placeholder="留空则不限制最大支付金额"><span class="input-group-addon">元</span></div>
+					</div>
+				</div>
+				<div class="form-group">
+					<label class="col-sm-2 control-label">最小支付金额限制</label>
+					<div class="col-sm-9">
+						<div class="input-group"><input class="form-control" type="text" name="pay_minmoney" value="<?php echo $userrow['pay_minmoney']?>" placeholder="留空则不限制最小支付金额"><span class="input-group-addon">元</span></div>
+					</div>
+				</div>
 				
 				<div class="form-group">
 				  <div class="col-sm-offset-2 col-sm-4"><input type="button" id="editInfo" value="确定修改" class="btn btn-primary form-control"/><br/>
 				 </div>
 				</div>
 
-<?php if($conf['wxnotice']==1 || $conf['mailnotice']==1){
+<?php if($conf['wxnotice']==1 || $conf['mailnotice']==1 || $conf['robotnotice']==1){
 	$userrow['msgconfig'] = unserialize($userrow['msgconfig']);
 ?>
 				<div class="line line-dashed b-b line-lg pull-in"></div>
@@ -265,7 +310,7 @@ if(strlen($userrow['phone'])==11){
 				<?php if($conf['wxnotice_tpl_order'] || $conf['msgconfig_order']){?><div class="form-group">
 					<label class="col-sm-2 control-label">新订单通知</label>
 					<div class="col-sm-9">
-						<select class="form-control" name="notice_order" default="<?php echo $userrow['msgconfig']['order']?>"><option value="0">关闭</option><?php if($conf['wxnotice_tpl_order']){?><option value="1">开启 - 微信公众号</option><?php } if($conf['msgconfig_order']){?><option value="2">开启 - 邮件</option><?php }?></select>
+						<select class="form-control" name="notice_order" default="<?php echo $userrow['msgconfig']['order']?>"><option value="0">关闭</option><?php if($conf['wxnotice_tpl_order']){?><option value="1">开启 - 微信公众号</option><?php } if($conf['mailnotice']){?><option value="2">开启 - 邮件</option><?php } if($conf['robotnotice']){?><option value="4">开启 - 群机器人</option><?php }?></select>
 					</div>
 				</div>
 				<div class="form-group">
@@ -277,19 +322,43 @@ if(strlen($userrow['phone'])==11){
 				<?php if($conf['wxnotice_tpl_settle'] || $conf['msgconfig_settle']){?><div class="form-group">
 					<label class="col-sm-2 control-label">结算通知</label>
 					<div class="col-sm-9">
-						<select class="form-control" name="notice_settle" default="<?php echo $userrow['msgconfig']['settle']?>"><option value="0">关闭</option><?php if($conf['wxnotice_tpl_settle']){?><option value="1">开启 - 微信公众号</option><?php } if($conf['msgconfig_settle']){?><option value="2">开启 - 邮件</option><?php }?></select>
+						<select class="form-control" name="notice_settle" default="<?php echo $userrow['msgconfig']['settle']?>"><option value="0">关闭</option><?php if($conf['wxnotice_tpl_settle']){?><option value="1">开启 - 微信公众号</option><?php } if($conf['mailnotice']){?><option value="2">开启 - 邮件</option><?php } if($conf['robotnotice']){?><option value="4">开启 - 群机器人</option><?php }?></select>
 					</div>
 				</div><?php }?>
 				<?php if($conf['wxnotice_tpl_login']){?><div class="form-group">
 					<label class="col-sm-2 control-label">登录通知</label>
 					<div class="col-sm-9">
-						<select class="form-control" name="notice_login" default="<?php echo $userrow['msgconfig']['login']?>"><option value="0">关闭</option><?php if($conf['wxnotice_tpl_login']){?><option value="1">开启 - 微信公众号</option><?php }?></select>
+						<select class="form-control" name="notice_login" default="<?php echo $userrow['msgconfig']['login']?>"><option value="0">关闭</option><?php if($conf['wxnotice_tpl_login']){?><option value="1">开启 - 微信公众号</option><?php } if($conf['mailnotice']){?><option value="2">开启 - 邮件</option><?php } if($conf['robotnotice']){?><option value="4">开启 - 群机器人</option><?php }?></select>
 					</div>
 				</div><?php }?>
-				<?php if($conf['wxnotice_tpl_complain'] || $conf['msgconfig_complain']){?><div class="form-group">
+				<?php if($conf['wxnotice_tpl_complain'] || $conf['msgconfig_complain'] || $conf['sms_tpl_complain']){?><div class="form-group">
 					<label class="col-sm-2 control-label">交易投诉通知</label>
 					<div class="col-sm-9">
-						<select class="form-control" name="notice_complain" default="<?php echo $userrow['msgconfig']['complain']?>"><option value="0">关闭</option><?php if($conf['wxnotice_tpl_complain']){?><option value="1">开启 - 微信公众号</option><?php } if($conf['msgconfig_complain']){?><option value="2">开启 - 邮件</option><?php }?></select>
+						<select class="form-control" name="notice_complain" default="<?php echo $userrow['msgconfig']['complain']?>"><option value="0">关闭</option><?php if($conf['wxnotice_tpl_complain']){?><option value="1">开启 - 微信公众号</option><?php } if($conf['mailnotice']){?><option value="2">开启 - 邮件</option><?php } if($conf['sms_tpl_complain']){?><option value="3">开启 - 短信</option><?php } if($conf['robotnotice']){?><option value="4">开启 - 群机器人</option><?php }?></select>
+					</div>
+				</div><?php }?>
+				<?php if($conf['msgconfig_mchrisk']){?><div class="form-group">
+					<label class="col-sm-2 control-label">渠道商户违规通知</label>
+					<div class="col-sm-9">
+						<select class="form-control" name="notice_mchrisk" default="<?php echo $userrow['msgconfig']['mchrisk']?>"><option value="0">关闭</option><?php if($conf['mailnotice']){?><option value="2">开启 - 邮件</option><?php }  if($conf['robotnotice']){?><option value="4">开启 - 群机器人</option><?php }?></select>
+					</div>
+				</div><?php }?>
+				<?php if($conf['wxnotice_tpl_balance'] || $conf['msgconfig_balance'] || $conf['sms_tpl_balance']){?><div class="form-group">
+					<label class="col-sm-2 control-label">余额不足提醒</label>
+					<div class="col-sm-9">
+						<select class="form-control" name="notice_balance" default="<?php echo $userrow['msgconfig']['balance']?>"><option value="0">关闭</option><?php if($conf['wxnotice_tpl_balance']){?><option value="1">开启 - 微信公众号</option><?php } if($conf['mailnotice']){?><option value="2">开启 - 邮件</option><?php } if($conf['sms_tpl_balance']){?><option value="3">开启 - 短信</option><?php } if($conf['robotnotice']){?><option value="4">开启 - 群机器人</option><?php }?></select>
+					</div>
+				</div>
+				<div class="form-group">
+					<label class="col-sm-2 control-label">余额小于多少时</label>
+					<div class="col-sm-9">
+					<div class="input-group"><input class="form-control" type="text" name="notice_balance_money" value="<?php echo $userrow['msgconfig']['balance_money']?>" placeholder="如开启余额提醒则必填"><span class="input-group-addon">元</span></div>
+					</div>
+				</div><?php }?>
+				<?php if($conf['robotnotice']){?><div class="form-group">
+					<label class="col-sm-2 control-label">群机器人Webhook地址</label>
+					<div class="col-sm-9">
+					<input class="form-control" type="text" name="notice_msgrobot_url" value="<?php echo $userrow['msgconfig']['msgrobot_url']?>" placeholder="仅支持填写企业微信、钉钉、飞书群机器人的Webhook地址">
 					</div>
 				</div><?php }?>
 				<div class="form-group">
@@ -384,9 +453,19 @@ if($group_settings){
     </div>
   </div>
 <?php include 'foot.php';?>
-<script src="<?php echo $cdnpublic?>layer/3.1.1/layer.min.js"></script>
+<script src="<?php echo $cdnpublic?>layer/3.1.1/layer.js"></script>
 <script src="<?php echo $cdnpublic?>jquery.qrcode/1.0/jquery.qrcode.min.js"></script>
 <script src="//static.geetest.com/static/tools/gt.js"></script>
+<script>
+window.appendChildOrg = Element.prototype.appendChild;
+Element.prototype.appendChild = function() {
+    if(arguments[0].tagName == 'SCRIPT'){
+        arguments[0].setAttribute('referrerpolicy', 'no-referrer');
+    }
+    return window.appendChildOrg.apply(this, arguments);
+};
+</script>
+<script src="//static.geetest.com/v4/gt4.js"></script>
 <script>
 function invokeSettime(obj){
     var countdown=60;
@@ -423,7 +502,7 @@ var handlerEmbed = function (captchaObj) {
 		$.ajax({
 			type : "POST",
 			url : "ajax2.php?act=sendcode",
-			data : {situation:situation,target:target,geetest_challenge:result.geetest_challenge,geetest_validate:result.geetest_validate,geetest_seccode:result.geetest_seccode},
+			data : {situation:situation,target:target, ...result},
 			dataType : 'json',
 			success : function(data) {
 				layer.close(ii);
@@ -438,10 +517,16 @@ var handlerEmbed = function (captchaObj) {
 				}
 			} 
 		});
+	}).onError(function(){
+		layer.msg('验证码加载失败，请刷新页面重试', {icon: 5});
 	});
 	$('#sendcode').click(function () {
 		if ($(this).attr("data-lock") === "true") return;
-		captchaObj.verify();
+		if(typeof captchaObj.showCaptcha === 'function'){
+			captchaObj.showCaptcha();
+		}else{
+			captchaObj.verify();
+		}
 	});
 	$('#sendcode2').click(function () {
 		if ($(this).attr("data-lock") === "true") return;
@@ -455,16 +540,23 @@ var handlerEmbed = function (captchaObj) {
 			var reg = /^([a-zA-Z0-9_-])+@([a-zA-Z0-9_-])+(.[a-zA-Z0-9_-])+/;
 			if(!reg.test(target)){layer.alert('邮箱格式不正确！');return false;}
 		}
-		captchaObj.verify();
+		if(typeof captchaObj.showCaptcha === 'function'){
+			captchaObj.showCaptcha();
+		}else{
+			captchaObj.verify();
+		}
 	});
 	$('#sendcode3').click(function () {
 		if ($(this).attr("data-lock") === "true") return;
 		target=$("input[name='phone_s']").val();
 		if(target==''){layer.alert('手机号码不能为空！');return false;}
 		if(target.length!=11){layer.alert('手机号码不正确！');return false;}
-		captchaObj.verify();
+		if(typeof captchaObj.showCaptcha === 'function'){
+			captchaObj.showCaptcha();
+		}else{
+			captchaObj.verify();
+		}
 	})
-	// 更多接口参考：http://www.geetest.com/install/sections/idx-client-sdk.html
 };
 $(document).ready(function(){
 	var items = $("select[default]");
@@ -512,6 +604,11 @@ $(document).ready(function(){
 		var keylogin=$("select[name='keylogin']").val();
 		var refund=$("select[name='refund']").val();
 		var transfer=$("select[name='transfer']").val();
+		var remain_money=$("input[name='remain_money']").val();
+		var pay_maxmoney=$("input[name='pay_maxmoney']").val();
+		var pay_minmoney=$("input[name='pay_minmoney']").val();
+		if(pay_maxmoney!='' && isNaN(pay_maxmoney)){layer.alert('最大支付金额必须为数字！');return false;}
+		if(pay_minmoney!='' && isNaN(pay_minmoney)){layer.alert('最小支付金额必须为数字！');return false;}
 		if(email=='' || qq=='' || url==''){layer.alert('请确保各项不能为空！');return false;}
 		if(email.length>0){
 			var reg = /^([a-zA-Z0-9_-])+@([a-zA-Z0-9_-])+(.[a-zA-Z0-9_-])+/;
@@ -534,7 +631,7 @@ $(document).ready(function(){
 		$.ajax({
 			type : "POST",
 			url : "ajax2.php?act=edit_info",
-			data : {email:email,qq:qq,url:url,keylogin:keylogin,refund:refund,transfer:transfer},
+			data : {email:email,qq:qq,url:url,keylogin:keylogin,refund:refund,transfer:transfer,remain_money:remain_money, pay_maxmoney:pay_maxmoney,pay_minmoney:pay_minmoney},
 			dataType : 'json',
 			success : function(data) {
 				layer.close(ii);
@@ -585,17 +682,40 @@ $(document).ready(function(){
 			}
 		});
 	});
+	$("#editVoice").click(function(){
+		var voice_devid=$("input[name='voice_devid']").val();
+		var voice_order=$("select[name='voice_order']").val();
+		var ii = layer.load(2, {shade:[0.1,'#fff']});
+		$.ajax({
+			type : "POST",
+			url : "ajax2.php?act=edit_voice",
+			data : {voice_devid:voice_devid, voice_order:voice_order},
+			dataType : 'json',
+			success : function(data) {
+				layer.close(ii);
+				if(data.code == 1){
+					layer.alert('修改成功！', {icon:1});
+				}else{
+					layer.alert(data.msg);
+				}
+			}
+		});
+	});
 	$("#editMsgConfig").click(function(){
 		var notice_order=$("select[name='notice_order']").val();
 		var notice_settle=$("select[name='notice_settle']").val();
 		var notice_login=$("select[name='notice_login']").val();
 		var notice_complain=$("select[name='notice_complain']").val();
+		var notice_mchrisk=$("select[name='notice_mchrisk']").val();
 		var notice_order_money=$("input[name='notice_order_money']").val();
+		var notice_balance=$("select[name='notice_balance']").val();
+		var notice_balance_money=$("input[name='notice_balance_money']").val();
+		var notice_msgrobot_url=$("input[name='notice_msgrobot_url']").val();
 		var ii = layer.load(2, {shade:[0.1,'#fff']});
 		$.ajax({
 			type : "POST",
 			url : "ajax2.php?act=edit_msgconfig",
-			data : {notice_order:notice_order, notice_settle:notice_settle, notice_login:notice_login, notice_complain:notice_complain, notice_order_money:notice_order_money},
+			data : {notice_order:notice_order, notice_settle:notice_settle, notice_login:notice_login, notice_complain:notice_complain, notice_mchrisk:notice_mchrisk, notice_order_money:notice_order_money, notice_balance:notice_balance, notice_balance_money:notice_balance_money, notice_msgrobot_url:notice_msgrobot_url},
 			dataType : 'json',
 			success : function(data) {
 				layer.close(ii);
@@ -746,20 +866,29 @@ $(document).ready(function(){
 		});
 	});
 	$.ajax({
-		url: "ajax.php?act=captcha&t=" + (new Date()).getTime(),
+		url: "ajax.php?act=captcha",
 		type: "get",
-		asysn: true,
+		cache: false,
 		dataType: "json",
 		success: function (data) {
-			console.log(data);
-			initGeetest({
-				width: '100%',
-				gt: data.gt,
-				challenge: data.challenge,
-				new_captcha: data.new_captcha,
-				product: "bind",
-				offline: !data.success
-			}, handlerEmbed);
+			if(data.version == 1){
+				initGeetest4({
+					captchaId: data.gt,
+					product: 'bind',
+					protocol: 'https://',
+					riskType: 'slide',
+					hideSuccess: true,
+				}, handlerEmbed);
+			}else{
+				initGeetest({
+					width: '100%',
+					gt: data.gt,
+					challenge: data.challenge,
+					new_captcha: data.new_captcha,
+					product: "bind",
+					offline: !data.success
+				}, handlerEmbed);
+			}
 		}
 	});
 });

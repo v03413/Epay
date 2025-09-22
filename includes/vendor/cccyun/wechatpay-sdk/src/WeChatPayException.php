@@ -27,7 +27,7 @@ class WeChatPayException extends \Exception
         parent::__construct($message);
     }
 
-    public function getResponse()
+    public function getResponse(): array
     {
         return $this->res;
     }

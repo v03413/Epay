@@ -104,9 +104,17 @@ class zyu_plugin
 		$data["pay_productname"] = $ordername;
 		$res = get_curl($apiurl,http_build_query($data));
 		$result = json_decode($res,true);
-		if($result['status']==200 || $result['status']=='success'){
-			$code_url = $result['data'];
-			if(is_array($code_url)) $code_url = $result['data']['payUrl'];
+		if(isset($result['status']) && ($result['status']==200 || $result['status']=='success' || $result['status']=='1') || isset($result['code']) && $result['code']==200){
+			if(isset($result['data'])){
+				$code_url = $result['data'];
+				if(is_array($code_url)) $code_url = $result['data']['payUrl'];
+			}elseif(isset($result['payurl'])){
+				$code_url = $result['payurl'];
+			}elseif(isset($result['payUrl'])){
+				$code_url = $result['payUrl'];
+			}else{
+				return ['type'=>'error','msg'=>'获取支付链接失败'];
+			}
 			if($channel['appswitch']==2){
 				if($_GET['type'] == 'alipay'){
 					return ['type'=>'qrcode','page'=>'alipay_qrcode','url'=>$code_url];

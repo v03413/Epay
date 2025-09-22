@@ -67,12 +67,12 @@ if(isset($_GET['auth_code'])){
 	if(isset($_GET['state'])){
 		$redirect_uri = authcode(str_replace(' ', '+', $_GET['state']), 'DECODE', SYS_KEY);
 		if($redirect_uri && substr($redirect_uri, 0, 1) == '/'){
-			exit("<script language='javascript'>window.location.replace('{$redirect_uri}?userid={$user_id}&usertype={$user_type}');</script>");
+			exit("<script language='javascript'>window.location.replace('{$redirect_uri}?userid={$user_id}&usertype={$user_type}&appid={$channel['appid']}');</script>");
 		}
 	}
 	$_SESSION['alipay_uid'] = $user_id;
 
-	$userrow=$DB->getRow("SELECT * FROM pre_user WHERE alipay_uid='{$user_id}' limit 1");
+	$userrow=$DB->getRow("SELECT * FROM pre_user WHERE alipay_uid=:user_id limit 1", [':user_id'=>$user_id]);
 	if($userrow){
 		$uid=$userrow['uid'];
 		$key=$userrow['key'];
@@ -88,7 +88,7 @@ if(isset($_GET['auth_code'])){
 		@header('Content-Type: text/html; charset=UTF-8');
 		exit("<script language='javascript'>window.location.href='./';</script>");
 	}elseif($islogin2==1){
-		$sds=$DB->exec("update `pre_user` set `alipay_uid`='$user_id' where `uid`='$uid'");
+		$sds=$DB->exec("update `pre_user` set `alipay_uid`=:user_id where `uid`='$uid'", [':user_id'=>$user_id]);
 		@header('Content-Type: text/html; charset=UTF-8');
 		exit("<script language='javascript'>alert('已成功绑定支付宝账号！');window.location.href='./editinfo.php';</script>");
 	}else{
@@ -123,9 +123,8 @@ if(isset($_GET['bind'])){
 <title>支付宝快捷登录 | <?php echo $conf['sitename']?></title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
 <link rel="stylesheet" href="<?php echo $cdnpublic?>twitter-bootstrap/3.4.1/css/bootstrap.min.css" type="text/css" />
-<link rel="stylesheet" href="<?php echo $cdnpublic?>animate.css/3.5.2/animate.min.css" type="text/css" />
+<link rel="stylesheet" href="<?php echo $cdnpublic?>animate.css/3.7.2/animate.min.css" type="text/css" />
 <link rel="stylesheet" href="<?php echo $cdnpublic?>font-awesome/4.7.0/css/font-awesome.min.css" type="text/css" />
-<link rel="stylesheet" href="<?php echo $cdnpublic?>simple-line-icons/2.4.1/css/simple-line-icons.min.css" type="text/css" />
 <link rel="stylesheet" href="./assets/css/font.css" type="text/css" />
 <link rel="stylesheet" href="./assets/css/app.css" type="text/css" />
 <style>input:-webkit-autofill{-webkit-box-shadow:0 0 0px 1000px white inset;-webkit-text-fill-color:#333;}img.logo{width:14px;height:14px;margin:0 5px 0 3px;}</style>

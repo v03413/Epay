@@ -38,6 +38,7 @@ class passpay_plugin
 			'1' => '支付宝当面付',
 			'2' => '支付宝电脑',
 			'3' => '支付宝H5',
+			'4' => '支付宝生活号',
 		],
 		'select_wxpay' => [
 			'1' => '微信扫码',
@@ -72,9 +73,13 @@ class passpay_plugin
 	}
 
 	static public function mapi(){
-		global $siteurl, $channel, $order, $conf, $device, $mdevice;
+		global $siteurl, $channel, $order, $conf, $device, $mdevice, $method;
 
-		if($order['typename']=='alipay'){
+		if($method=='jsapi'){
+			if($order['typename']=='wxpay'){
+				return self::wxjspay();
+			}
+		}elseif($order['typename']=='alipay'){
 			return self::alipay();
 		}elseif($order['typename']=='wxpay'){
 			if($mdevice=='wechat' && in_array('2',$channel['apptype'])){
@@ -131,11 +136,13 @@ class passpay_plugin
 
 	//支付宝支付
 	static public function alipay(){
-		global $channel, $device;
+		global $channel, $device, $mdevice, $siteurl;
 		if(in_array('3',$channel['apptype']) && ($device=='mobile' || checkmobile())){
 			$trade_type = 'alipayWap';
 		}elseif(in_array('2',$channel['apptype']) && ($device=='pc' || !checkmobile())){
 			$trade_type = 'alipayPc';
+		}elseif(in_array('4',$channel['apptype']) && !in_array('3',$channel['apptype'])){
+			$trade_type = 'alipayPub';
 		}else{
 			$trade_type = 'alipayQr';
 		}
@@ -146,7 +153,11 @@ class passpay_plugin
 			return ['type'=>'error','msg'=>'支付宝支付下单失败！'.$ex->getMessage()];
 		}
 
-		return ['type'=>'qrcode','page'=>'alipay_qrcode','url'=>$code_url];
+		if(checkalipay() || $mdevice=='alipay'){
+			return ['type'=>'jump','url'=>$code_url];
+		}else{
+			return ['type'=>'qrcode','page'=>'alipay_qrcode','url'=>$code_url];
+		}
 	}
 
 	//微信扫码支付
@@ -169,17 +180,27 @@ class passpay_plugin
 
 	//微信公众号支付
 	static public function wxjspay(){
-		global $siteurl, $channel, $order, $ordername, $conf;
+		global $siteurl, $channel, $order, $method, $conf;
 
 		if($channel['appwxmp'] > 0){
 			//①、获取用户openid
-			$wxinfo = \lib\Channel::getWeixin($channel['appwxmp']);
-			if(!$wxinfo) return ['type'=>'error','msg'=>'支付通道绑定的微信公众号不存在'];
-			try{
-				$tools = new \WeChatPay\JsApiTool($wxinfo['appid'], $wxinfo['appsecret']);
-				$openid = $tools->GetOpenid();
-			}catch(Exception $e){
-				return ['type'=>'error','msg'=>$e->getMessage()];
+			if(!empty($order['sub_openid'])){
+				if(!empty($order['sub_appid'])){
+					$wxinfo['appid'] = $order['sub_appid'];
+				}else{
+					$wxinfo = \lib\Channel::getWeixin($channel['appwxmp']);
+					if(!$wxinfo) return ['type'=>'error','msg'=>'支付通道绑定的微信公众号不存在'];
+				}
+				$openid = $order['sub_openid'];
+			}else{
+				$wxinfo = \lib\Channel::getWeixin($channel['appwxmp']);
+				if(!$wxinfo) return ['type'=>'error','msg'=>'支付通道绑定的微信公众号不存在'];
+				try{
+					$tools = new \WeChatPay\JsApiTool($wxinfo['appid'], $wxinfo['appsecret']);
+					$openid = $tools->GetOpenid();
+				}catch(Exception $e){
+					return ['type'=>'error','msg'=>$e->getMessage()];
+				}
 			}
 			$blocks = checkBlockUser($openid, TRADE_NO);
 			if($blocks) return $blocks;
@@ -189,6 +210,9 @@ class passpay_plugin
 				$result = self::addOrder('wechatPub', $wxinfo['appid'], $openid);
 			}catch(Exception $ex){
 				return ['type'=>'error','msg'=>'微信支付下单失败！'.$ex->getMessage()];
+			}
+			if($method == 'jsapi'){
+				return ['type'=>'jsapi','data'=>$result['payInfo']];
 			}
 
 			if($_GET['d']==1){
@@ -306,8 +330,9 @@ class passpay_plugin
 			if ($_POST['order_status'] == 'SUCCESS') {
 				$out_trade_no = $_POST['out_trade_no'];
 				$trade_no = $_POST['trade_no'];
+				$bill_trade_no = $_POST['channel_order_sn'];
 				if($out_trade_no == TRADE_NO){
-					processNotify($order, $trade_no);
+					processNotify($order, $trade_no, null, $bill_trade_no);
 				}
 				return ['type'=>'html','data'=>'success'];
 			}

@@ -24,7 +24,7 @@ if (!defined('IN_PLUGIN'))
                 <span class="logo-tile">微信支付</span>
             </div>
             <div class="payment-content">
-                <h1 style="margin-top: 8px;margin-bottom: 16px;">￥<?php echo $order['money']; ?></h1>
+                <h1 style="margin-top: 8px;margin-bottom: 16px;">¥<?php echo $order['realmoney']; ?></h1>
                 <div class="scan-the-code">
                     <ul class="nav nav-group" role="tablist">
                         <li class="active">
@@ -61,7 +61,7 @@ if (!defined('IN_PLUGIN'))
             </div>
         </div>
         <script src="<?php echo $cdnpublic ?>jquery/1.12.4/jquery.min.js"></script>
-        <script src="<?php echo $cdnpublic ?>layer/3.1.1/layer.min.js"></script>
+        <script src="<?php echo $cdnpublic ?>layer/3.1.1/layer.js"></script>
         <script src="<?php echo $cdnpublic ?>jquery.qrcode/1.0/jquery.qrcode.min.js"></script>
         <script src="<?php echo $cdnpublic ?>clipboard.js/1.7.1/clipboard.min.js"></script>
         <script>

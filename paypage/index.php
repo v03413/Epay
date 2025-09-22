@@ -1,7 +1,12 @@
 <?php
 $is_defend = true;
 include("./inc.php");
-if(isset($_GET['merchant'])){
+if(isset($_GET['ucode'])){
+	$code=trim($_GET['ucode']);
+    if(!preg_match('/^[a-zA-Z0-9]{1,32}$/',$code)) showerror('参数错误');
+    $uid = $DB->findColumn('onecode', 'uid', ['code' => $code]);
+    if(!$uid) showerror('当前码牌未绑定商户<br/>码牌编号：'.$code.'<br/><p class="weui-btn-area"><a href="/user/onecode.php?bind='.$code.'" class="weui-btn weui-btn_primary">点此绑定</a></p>');
+}elseif(isset($_GET['merchant'])){
 	$merchant=trim($_GET['merchant']);
 	$uid = authcode($merchant, 'DECODE', SYS_KEY);
 	if(!$uid || !is_numeric($uid))showerror('参数错误');
@@ -10,14 +15,19 @@ if(isset($_GET['merchant'])){
 }else{
 	showerror('参数不完整');
 }
-$userrow = $DB->getRow("SELECT `uid`,`gid`,`money`,`mode`,`pay`,`cert`,`status`,`username`,`channelinfo`,`qq`,`codename` FROM `pre_user` WHERE `uid`='{$uid}' LIMIT 1");
+$userrow = $DB->getRow("SELECT `uid`,`gid`,`money`,`mode`,`pay`,`cert`,`status`,`username`,`channelinfo`,`qq`,`codename`,`deposit` FROM `pre_user` WHERE `uid`='{$uid}' LIMIT 1");
 if(!$userrow || $userrow['status']==0 || $userrow['pay']==0)showerror('当前商户不存在或已被封禁');
 if($userrow['pay']==2 && $conf['user_review']==1)showerror('商户没通过审核，请联系官方客服进行审核');
+$groupconfig = getGroupConfig($userrow['gid']);
+$conf = array_merge($conf, $groupconfig);
 if($conf['cert_force']==1 && $userrow['cert']==0){
 	showerror('当前商户未完成实名认证，无法收款');
 }
 if($conf['forceqq']==1 && empty($userrow['qq'])){
 	showerror('当前商户未填写联系QQ，无法收款');
+}
+if($conf['user_deposit']==1 && $conf['user_deposit_min'] > 0 && $conf['user_deposit_min'] > $userrow['deposit']){
+    showerror('商户保证金不足，请前往支付平台充值保证金后再发起支付');
 }
 
 $_SESSION['paypage_uid'] = $uid;
@@ -26,8 +36,9 @@ $direct = '0';
 $checktype = check_paytype();
 $type = isset($_GET['type'])?trim($_GET['type']):$checktype;
 if($type){
-    if((isset($_GET['code']) || isset($_GET['auth_code'])) && $_SESSION['paypage_channel']){
+    if((isset($_GET['code']) || isset($_GET['auth_code']) || isset($_GET['userAuthCode'])) && $_SESSION['paypage_channel']){
         $submitData = \lib\Channel::info($_SESSION['paypage_channel'], $userrow['gid']);
+        if($_SESSION['paypage_subchannel'] > 0) $submitData['subchannel'] = $_SESSION['paypage_subchannel'];
     }else{
         $submitData = \lib\Channel::submit($type, $uid, $userrow['gid']);
         $_SESSION['paypage_subchannel'] = $submitData['subchannel'];
@@ -39,14 +50,87 @@ if($type){
 	$_SESSION['paypage_paymin'] = $submitData['paymin'];
     $_SESSION['paypage_mode'] = $submitData['mode'];
 
-	$apptype = explode(',',$submitData['apptype']);
-	if($checktype == 'alipay' && $type == 'alipay' && ($submitData['plugin']=='alipay' || $submitData['plugin']=='alipaysl' || $submitData['plugin']=='alipayd') && in_array('4',$apptype)){
-		$openId = alipayOpenId($submitData['channel']);
+    $channel = $submitData['subchannel'] > 0 ? \lib\Channel::getSub($submitData['subchannel']) : \lib\Channel::get($submitData['channel'], $userrow['channelinfo']);
+    if(!$channel)showerror('支付通道不存在');
+
+	$apptype = explode(',',$channel['apptype']);
+	if($checktype == 'alipay' && $type == 'alipay' && (
+        ($submitData['plugin']=='alipay' || $submitData['plugin']=='alipaysl' || $submitData['plugin']=='alipayd') && in_array('4',$apptype)
+        || $submitData['plugin']=='lakala' && in_array('2',$apptype)
+        || $submitData['plugin']=='huifu' && in_array('4',$apptype)
+        || $submitData['plugin']=='xsy' && in_array('2',$apptype)
+        || $submitData['plugin']=='baofu' && in_array('2',$apptype)
+        || $submitData['plugin']=='adapay' && in_array('2',$apptype)
+        || $submitData['plugin']=='allinpay' && in_array('2',$apptype)
+        || $submitData['plugin']=='dinpay' && in_array('3',$apptype)
+        || $submitData['plugin']=='duolabao' && in_array('2',$apptype)
+        || $submitData['plugin']=='fubei'
+        || $submitData['plugin']=='fuiou2' && in_array('2',$apptype)
+        || $submitData['plugin']=='haipay' && in_array('2',$apptype)
+        || $submitData['plugin']=='hlpay' && in_array('2',$apptype)
+        || $submitData['plugin']=='huishouqian' && in_array('2',$apptype)
+        || $submitData['plugin']=='jindd' && in_array('2',$apptype)
+        || $submitData['plugin']=='jlpay' && in_array('2',$apptype)
+        || $submitData['plugin']=='joinpay' && in_array('3',$apptype)
+        || $submitData['plugin']=='leshua' && in_array('2',$apptype)
+        || $submitData['plugin']=='llianpay' && in_array('2',$apptype)
+        || $submitData['plugin']=='sandpay' && in_array('2',$apptype)
+        || $submitData['plugin']=='shengpay' && in_array('4',$apptype)
+        || $submitData['plugin']=='suixingpay' && in_array('2',$apptype)
+        || $submitData['plugin']=='unionpay' && in_array('2',$apptype)
+        || $submitData['plugin']=='ysepay' && in_array('3',$apptype)
+        || $submitData['plugin']=='yseqt' && in_array('2',$apptype)
+        || $submitData['plugin']=='yeepay' && in_array('2',$apptype)
+        )){
+        if($conf['alipay_web_login_all'] == 1 && $conf['alipay_web_login'] > 0 || $submitData['plugin']!='alipay' && $submitData['plugin']!='alipaysl' && $submitData['plugin']!='alipayd'){
+            if(!$conf['alipay_web_login']) showerror('未配置支付宝网页快捷登录通道');
+            $channel = \lib\Channel::get($conf['alipay_web_login']);
+        }
+        $openId = alipayOpenId($channel);
 		$direct = '1';
-	}elseif($checktype == 'wxpay' && $type == 'wxpay' && ($submitData['plugin']=='wxpay' || $submitData['plugin']=='wxpaysl' || $submitData['plugin']=='wxpayn' || $submitData['plugin']=='wxpaynp') && in_array('2',$apptype)){
-		$openId = weixinOpenId($submitData['channel']);
+	}elseif($checktype == 'wxpay' && $type == 'wxpay' && $channel['appwxmp']>0 && (
+        ($submitData['plugin']=='wxpay' || $submitData['plugin']=='wxpaysl' || $submitData['plugin']=='wxpayn' || $submitData['plugin']=='wxpaynp') && in_array('2',$apptype)
+        || $submitData['plugin']=='lakala'
+        || $submitData['plugin']=='huifu' && in_array('1',$apptype)
+        || $submitData['plugin']=='xsy'
+        || $submitData['plugin']=='baofu' && in_array('2',$apptype)
+        || $submitData['plugin']=='adapay' && in_array('1',$apptype)
+        || $submitData['plugin']=='allinpay' && in_array('2',$apptype)
+        || $submitData['plugin']=='dinpay' && in_array('3',$apptype)
+        || $submitData['plugin']=='duolabao' && in_array('2',$apptype)
+        || $submitData['plugin']=='fubei'
+        || $submitData['plugin']=='fuiou2' && in_array('2',$apptype)
+        || $submitData['plugin']=='haipay'
+        || $submitData['plugin']=='hlpay' && in_array('2',$apptype)
+        || $submitData['plugin']=='huishouqian' && in_array('2',$apptype)
+        || $submitData['plugin']=='jindd' && in_array('1',$apptype)
+        || $submitData['plugin']=='jlpay' && in_array('2',$apptype)
+        || $submitData['plugin']=='joinpay' && in_array('3',$apptype)
+        || $submitData['plugin']=='leshua' && in_array('2',$apptype)
+        || $submitData['plugin']=='llianpay' && in_array('2',$apptype)
+        || $submitData['plugin']=='passpay' && in_array('2',$apptype)
+        || $submitData['plugin']=='sandpay' && in_array('2',$apptype)
+        || $submitData['plugin']=='shengpay' && in_array('1',$apptype)
+        || $submitData['plugin']=='suixingpay' && in_array('2',$apptype)
+        || $submitData['plugin']=='unionpay' && in_array('2',$apptype)
+        || $submitData['plugin']=='ysepay' && in_array('2',$apptype)
+        || $submitData['plugin']=='yseqt' && in_array('3',$apptype)
+        || $submitData['plugin']=='yeepay' && in_array('2',$apptype)
+        )){
+		$openId = weixinOpenId($channel);
 		$direct = '1';
-	}elseif($checktype == 'qqpay' && $type == 'qqpay'&& $submitData['plugin']=='qqpay' && in_array('2',$apptype)){
+	}elseif($checktype == 'bank' && $type == 'bank' && (
+        $submitData['plugin']=='lakala' && in_array('2',$apptype)
+        || $submitData['plugin']=='huifu' && in_array('4',$apptype)
+        || $submitData['plugin']=='xsy' && in_array('2',$apptype)
+        || $submitData['plugin']=='baofu' && in_array('2',$apptype)
+        || $submitData['plugin']=='allinpay' && in_array('2',$apptype)
+        || $submitData['plugin']=='jlpay' && in_array('2',$apptype)
+        || $submitData['plugin']=='yseqt' && in_array('2',$apptype)
+        )){
+        $openId = unionpayOpenId($channel);
+		$direct = '1';
+	}elseif($checktype == 'qqpay' && $type == 'qqpay' && $submitData['plugin']=='qqpay' && in_array('2',$apptype)){
 		$direct = '1';
 	}
 }
@@ -168,7 +252,7 @@ $_SESSION['paypage_token'] = $csrf_token;
 <script src="//open.mobile.qq.com/sdk/qqapi.js?_bid=152"></script>
 <script src="js/hammer.js"></script>
 <script src="js/common.js"></script>
-<script src="js/pay.js?v=1004"></script>
+<script src="js/pay.js?v=1005"></script>
 <script>
 	document.body.addEventListener('touchmove', function (event) {
 		event.preventDefault();

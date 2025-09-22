@@ -10,7 +10,7 @@ if($islogin==1){}else exit("<script language='javascript'>window.location.href='
 <style>
 .table>tbody>tr>td{vertical-align: middle;}</style>
   <div class="container" style="padding-top:70px;">
-    <div class="col-xs-12 col-sm-10 col-lg-8 center-block" style="float: none;">
+    <div class="col-sm-12 col-md-10 col-lg-9 center-block" style="float: none;">
 <?php
 
 $list1 = $DB->getAll("SELECT * FROM pre_group WHERE isbuy=1 ORDER BY SORT ASC");
@@ -25,14 +25,14 @@ $list2 = $DB->getAll("SELECT * FROM pre_group WHERE isbuy=0");
    <div class="panel-heading"><h3 class="panel-title">可购买的用户组 （<b><?php echo count($list1);?></b>）</h3></div>
       <div class="table-responsive">
         <table class="table table-striped">
-          <thead><tr><th>GID</th><th>用户组名称</th><th>售价</th><th>有效期(月)</th><th>排序</th><th>操作</th></tr></thead>
+          <thead><tr><th>GID</th><th>用户组名称</th><th>售价</th><th>有效期(月)</th><th>排序</th><th>可见范围&nbsp;<a tabindex="0" role="button" data-toggle="popover" data-trigger="focus" title="" data-placement="top" data-content="可设置哪些用户组可以看到并购买该用户组，留空为全部可见，填写可见用户组GID，多个GID用,隔开" data-original-title="可见范围说明"><span class="glyphicon glyphicon-info-sign"></span></a></th><th>操作</th></tr></thead>
           <tbody><form id="glist">
 <?php
 foreach($list1 as $res)
 {
-echo '<tr><td><b>'.$res['gid'].'</b></td><td>'.$res['name'].'</td><td><input type="text" class="form-control input-sm" name="price['.$res['gid'].']" value="'.$res['price'].'" placeholder="填写售价" required></td><td><input type="text" class="form-control input-sm" name="expire['.$res['gid'].']" value="'.($res['expire']=='0'?'':$res['expire']).'" placeholder="0或留空为永久" required></td><td><input type="text" class="form-control input-sm" name="sort['.$res['gid'].']" value="'.$res['sort'].'" placeholder="填写数字，数字越小越靠前" required></td><td><a class="btn btn-sm btn-warning" onclick="setItem('.$res['gid'].',0)">下架</a></td></tr>';
+echo '<tr><td><b>'.$res['gid'].'</b></td><td>'.$res['name'].'</td><td><input type="text" class="form-control input-sm" name="price['.$res['gid'].']" value="'.$res['price'].'" placeholder="填写售价" required></td><td><input type="text" class="form-control input-sm" name="expire['.$res['gid'].']" value="'.($res['expire']=='0'?'':$res['expire']).'" placeholder="0或留空为永久" required></td><td><input type="text" class="form-control input-sm" name="sort['.$res['gid'].']" value="'.$res['sort'].'" placeholder="数字越小越靠前" required></td><td><input type="text" class="form-control input-sm" name="visible['.$res['gid'].']" value="'.$res['visible'].'" placeholder="留空为全部可见" required></td><td><a class="btn btn-sm btn-warning" onclick="setItem('.$res['gid'].',0)">下架</a></td></tr>';
 }
-if(count($list1)>0)echo '<tr><td></td><td></td><td colspan="3"><span class="btn btn-success btn-sm btn-block" onclick="saveAll()">保存全部</span></td><td></td></tr>';
+if(count($list1)>0)echo '<tr><td></td><td></td><td colspan="4"><span class="btn btn-success btn-sm btn-block" onclick="saveAll()">保存全部</span></td><td></td></tr>';
 ?></form>
           </tbody>
         </table>
@@ -56,7 +56,7 @@ echo '<tr><td><b>'.$res['gid'].'</b></td><td>'.$res['name'].'</td><td><a class="
 	</div>
   </div>
 </div>
-<script src="<?php echo $cdnpublic?>layer/3.1.1/layer.min.js"></script>
+<script src="<?php echo $cdnpublic?>layer/3.1.1/layer.js"></script>
 <script>
 function saveAll(){
 	var ii = layer.load(2, {shade:[0.1,'#fff']});
@@ -128,4 +128,7 @@ function changeSetting(value){
 		}
 	});
 }
+$(function () {
+  $('[data-toggle="popover"]').popover()
+})
 </script>

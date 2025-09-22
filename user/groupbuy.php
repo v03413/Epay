@@ -21,11 +21,17 @@ foreach($rs as $row){
 unset($rs);
 
 function display_info($info){
-	global $paytype,$paytypes;
+	global $paytype,$paytypes,$DB;
 	$result = '';
 	$arr = json_decode($info, true);
 	foreach($arr as $k=>$v){
 		if($v['channel']==0)continue;
+		if(empty($v['rate'])){
+			$v['rate'] = 100;
+			if($v['type'] == 'channel'){
+				$v['rate'] = $DB->getColumn("SELECT rate FROM pre_channel WHERE id=:id", [':id'=>$v['channel']]);
+			}
+		}
 		$result .= '<label><img src="/assets/icon/'.$paytypes[$k].'.ico" width="18px" title="'.$v['channel'].'">&nbsp;'.$paytype[$k].'('.round(100-$v['rate'],2).'%)</label>&nbsp;&nbsp;';
 	}
 	return substr($result,0,-1);
@@ -92,6 +98,10 @@ if($userrow['endtime'] && $mygroup['isbuy']==1) $gexpire.=' [<a href="javascript
           <tbody>
 <?php
 foreach($list as $res){
+	if(!isNullOrEmpty($res['visible'])){
+		$visible = explode(',',$res['visible']);
+		if(!in_array($userrow['gid'], $visible))continue;
+	}
 	echo '<tr><td><b>'.$res['name'].'</b></td><td>'.display_info($res['info']).'</td><td><span style="font-size:20px;font-weight:700;color:#f40;">'.$res['price'].'</span> / '.($res['expire']==0?'永久':$res['expire'].'个月').'</td><td>'.($userrow['gid']==$res['gid']?'<a class="btn btn-sm btn-info" href="javascript:;" disabled>当前等级</a>':'<a class="btn btn-sm btn-info" href="javascript:buy('.$res['gid'].')">立即购买</a>').'</td></tr>';
 }
 ?>
@@ -164,7 +174,7 @@ foreach($list as $res){
   </div>
 
 <?php include 'foot.php';?>
-<script src="<?php echo $cdnpublic?>layer/3.1.1/layer.min.js"></script>
+<script src="<?php echo $cdnpublic?>layer/3.1.1/layer.js"></script>
 <script>
 function buy(gid, type){
 	var ii = layer.load();

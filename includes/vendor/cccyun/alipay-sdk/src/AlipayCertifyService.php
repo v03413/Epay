@@ -2,6 +2,8 @@
 
 namespace Alipay;
 
+use Exception;
+
 /**
  * 支付宝身份认证服务类
  * @see https://opendocs.alipay.com/open/repo-013ubq
@@ -12,26 +14,27 @@ class AlipayCertifyService extends AlipayService
     private $return_url;
 
     /**
-     * @param $config 支付宝配置信息
+     * @param array $config 支付宝配置信息
      */
-    public function __construct($config)
+    public function __construct(array $config)
     {
         parent::__construct($config);
         $this->return_url = $config['return_url'];
     }
 
-    /**
-     * 身份认证初始化服务
-     * @param $outer_order_no 商户请求的唯一标识
-     * @param $cert_name 真实姓名
-     * @param $cert_no 证件号码
-     * @param $cert_type 证件类型
-     * @param $biz_code 认证场景码（FACE、SMART_FACE）
-     * @return mixed {"code":"10000","msg":"Success","certify_id":"本次申请操作的唯一标识"}
-     * 
-     * @see https://opendocs.alipay.com/open/02ahjy
-     */
-    public function initialize($outer_order_no, $cert_name, $cert_no, $cert_type = 'IDENTITY_CARD', $biz_code = 'SMART_FACE')
+	/**
+	 * 身份认证初始化服务
+	 * @param string $outer_order_no 商户请求的唯一标识
+	 * @param string $cert_name 真实姓名
+	 * @param string $cert_no 证件号码
+	 * @param string $cert_type 证件类型
+	 * @param string $biz_code 认证场景码（FACE、SMART_FACE）
+	 * @return mixed {"code":"10000","msg":"Success","certify_id":"本次申请操作的唯一标识"}
+	 *
+	 * @throws Exception
+	 * @see https://opendocs.alipay.com/open/02ahjy
+	 */
+    public function initialize(string $outer_order_no, string $cert_name, string $cert_no, string $cert_type = 'IDENTITY_CARD', string $biz_code = 'SMART_FACE')
     {
         $apiName = 'alipay.user.certify.open.initialize';
         $bizContent = [
@@ -48,12 +51,13 @@ class AlipayCertifyService extends AlipayService
         return $this->aopExecute($apiName, $bizContent);
     }
 
-    /**
-     * 身份认证开始认证
-     * @param $certify_id 本次申请操作的唯一标识
-     * @return string html表单
-     */
-    public function certify($certify_id)
+	/**
+	 * 身份认证开始认证
+	 * @param string $certify_id 本次申请操作的唯一标识
+	 * @return string html表单
+	 * @throws Exception
+	 */
+    public function certify(string $certify_id): string
     {
         $apiName = 'alipay.user.certify.open.certify';
         $bizContent = array(
@@ -62,12 +66,13 @@ class AlipayCertifyService extends AlipayService
         return $this->aopPageExecute($apiName, $bizContent);
     }
 
-    /**
-     * 身份认证记录查询
-     * @param $certify_id 本次申请操作的唯一标识
-     * @return mixed {"code":"10000","msg":"Success","passed":"T"}
-     */
-    public function query($certify_id)
+	/**
+	 * 身份认证记录查询
+	 * @param string $certify_id 本次申请操作的唯一标识
+	 * @return mixed {"code":"10000","msg":"Success","passed":"T"}
+	 * @throws Exception
+	 */
+    public function query(string $certify_id)
     {
         $apiName = 'alipay.user.certify.open.query';
         $bizContent = array(

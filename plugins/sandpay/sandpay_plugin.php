@@ -31,6 +31,14 @@ class sandpay_plugin
 				'options' => ['QZF'=>'标准线上收款','CSDB'=>'企业杉德宝'],
 			],
 		],
+		'select_alipay' => [
+			'1' => '扫码支付',
+			'2' => 'JS支付',
+		],
+		'select_wxpay' => [
+			'1' => '扫码支付',
+			'2' => '公众号/小程序支付',
+		],
 		'select_bank' => [
 			'1' => '银联聚合码',
 			'2' => '快捷支付',
@@ -45,7 +53,11 @@ class sandpay_plugin
 		global $siteurl, $channel, $order, $sitename;
 
 		if($order['typename']=='alipay'){
-			return ['type'=>'jump','url'=>'/pay/alipay/'.TRADE_NO.'/'];
+			if(checkalipay() && in_array('2',$channel['apptype'])){
+				return ['type'=>'jump','url'=>'/pay/alipayjs/'.TRADE_NO.'/?d=1'];
+			}else{
+				return ['type'=>'jump','url'=>'/pay/alipay/'.TRADE_NO.'/'];
+			}
 		}elseif($order['typename']=='wxpay'){
 			if(checkwechat() && $channel['appwxmp']>0){
 				return ['type'=>'jump','url'=>'/pay/wxjspay/'.TRADE_NO.'/?d=1'];
@@ -64,10 +76,20 @@ class sandpay_plugin
 	}
 
 	static public function mapi(){
-		global $siteurl, $channel, $order, $conf, $device, $mdevice;
+		global $siteurl, $channel, $order, $conf, $device, $mdevice, $method;
 
-		if($order['typename']=='alipay'){
-			return self::alipay();
+		if($method=='jsapi'){
+			if($order['typename']=='alipay'){
+				return self::alipayjs();
+			}elseif($order['typename']=='wxpay'){
+				return self::wxjspay();
+			}
+		}elseif($order['typename']=='alipay'){
+			if($mdevice=='alipay' && in_array('2',$channel['apptype'])){
+				return ['type'=>'jump','url'=>$siteurl.'pay/alipayjs/'.TRADE_NO.'/?d=1'];
+			}else{
+				return self::alipay();
+			}
 		}elseif($order['typename']=='wxpay'){
 			if($mdevice=='wechat' && $channel['appwxmp']>0){
 				return ['type'=>'jump','url'=>$siteurl.'/pay/wxjspay/'.TRADE_NO.'/?d=1'];
@@ -124,32 +146,85 @@ class sandpay_plugin
 		}
 
 		return \lib\Payment::lockPayData(TRADE_NO, function() use($client, $params) {
+			global $channel;
 			$result = $client->execute('/v4/sd-receipts/api/trans/trans.order.create', $params);
 			\lib\Payment::updateOrder(TRADE_NO, $result['sandSerialNo']);
+			if($channel['appswitch']==1){
+				$log = "商户订单号：".TRADE_NO."\r\n【统一下单接口】请求报文：\r\n".$client->request_body."\r\n【统一下单接口】响应报文：\r\n".$client->response_body."\r\n\r\n";
+				file_put_contents(PAY_ROOT.'logs/'.date('Ymd').'.log', $log, FILE_APPEND);
+			}
 			return $result['credential'];
 		});
 	}
 
 	//支付宝扫码支付
 	static public function alipay(){
+		global $channel, $device, $mdevice, $siteurl;
+		if(in_array('2',$channel['apptype']) && !in_array('1',$channel['apptype'])){
+			$code_url = $siteurl.'pay/alipayjs/'.TRADE_NO.'/';
+		}else{
+			try{
+				$result = self::addOrder('ALIPAY','QR');
+				$code_url = $result['qrCode'];
+			}catch(Exception $ex){
+				return ['type'=>'error','msg'=>'支付宝支付下单失败！'.$ex->getMessage()];
+			}
+		}
+
+		if(checkalipay() || $mdevice=='alipay'){
+			return ['type'=>'jump','url'=>$code_url];
+		}else{
+			return ['type'=>'qrcode','page'=>'alipay_qrcode','url'=>$code_url];
+		}
+	}
+
+	static public function alipayjs(){
+		global $conf, $method, $order;
+		if(!empty($order['sub_openid'])){
+			$user_id = $order['sub_openid'];
+		}else{
+			[$user_type, $user_id] = alipay_oauth();
+		}
+
+		$blocks = checkBlockUser($user_id, TRADE_NO);
+		if($blocks) return $blocks;
+		if($user_type == 'openid'){
+			return ['type'=>'error','msg'=>'支付宝快捷登录获取uid失败，需将用户标识切换到uid模式'];
+		}
+
 		try{
-			$result = self::addOrder('ALIPAY','QR');
-			$code_url = $result['qrCode'];
+			$result = self::addOrder('ALIPAY', 'JSAPI', $user_id);
 		}catch(Exception $ex){
 			return ['type'=>'error','msg'=>'支付宝支付下单失败！'.$ex->getMessage()];
 		}
+		if($method == 'jsapi'){
+			return ['type'=>'jsapi','data'=>$result['tradeNo']];
+		}
 
-		return ['type'=>'qrcode','page'=>'alipay_qrcode','url'=>$code_url];
+		if($_GET['d']=='1'){
+			$redirect_url='data.backurl';
+		}else{
+			$redirect_url='\'/pay/ok/'.TRADE_NO.'/\'';
+		}
+		return ['type'=>'page','page'=>'alipay_jspay','data'=>['alipay_trade_no'=>$result['tradeNo'], 'redirect_url'=>$redirect_url]];
 	}
 
 	//微信扫码支付
 	static public function wxpay(){
 		global $channel, $siteurl, $device, $mdevice;
-		try{
-			$result = self::addOrder('WXPAY','QR');
-			$code_url = $result['qrCode'];
-		}catch(Exception $ex){
-			return ['type'=>'error','msg'=>'微信支付下单失败！'.$ex->getMessage()];
+		if(in_array('2',$channel['apptype']) && !in_array('1',$channel['apptype'])){
+			if($channel['appwxmp']>0 && $channel['appwxa']==0){
+				$code_url = $siteurl.'pay/wxjspay/'.TRADE_NO.'/';
+			}else{
+				$code_url = $siteurl.'pay/wxwappay/'.TRADE_NO.'/';
+			}
+		}else{
+			try{
+				$result = self::addOrder('WXPAY','QR');
+				$code_url = $result['qrCode'];
+			}catch(Exception $ex){
+				return ['type'=>'error','msg'=>'微信支付下单失败！'.$ex->getMessage()];
+			}
 		}
 
 		if (checkwechat() || $mdevice=='wechat') {
@@ -163,16 +238,25 @@ class sandpay_plugin
 
 	//微信公众号
 	static public function wxjspay(){
-		global $siteurl, $channel, $order, $ordername, $conf, $clientip;
+		global $siteurl, $channel, $order, $method, $conf, $clientip;
 
-		$wxinfo = \lib\Channel::getWeixin($channel['appwxmp']);
-		if(!$wxinfo) return ['type'=>'error','msg'=>'支付通道绑定的微信公众号不存在'];
-
-		try{
-			$tools = new \WeChatPay\JsApiTool($wxinfo['appid'], $wxinfo['appsecret']);
-			$openid = $tools->GetOpenid();
-		}catch(Exception $e){
-			return ['type'=>'error','msg'=>$e->getMessage()];
+		if(!empty($order['sub_openid'])){
+			if(!empty($order['sub_appid'])){
+				$wxinfo['appid'] = $order['sub_appid'];
+			}else{
+				$wxinfo = \lib\Channel::getWeixin($channel['appwxmp']);
+				if(!$wxinfo) return ['type'=>'error','msg'=>'支付通道绑定的微信公众号不存在'];
+			}
+			$openid = $order['sub_openid'];
+		}else{
+			$wxinfo = \lib\Channel::getWeixin($channel['appwxmp']);
+			if(!$wxinfo) return ['type'=>'error','msg'=>'支付通道绑定的微信公众号不存在'];
+			try{
+				$tools = new \WeChatPay\JsApiTool($wxinfo['appid'], $wxinfo['appsecret']);
+				$openid = $tools->GetOpenid();
+			}catch(Exception $e){
+				return ['type'=>'error','msg'=>$e->getMessage()];
+			}
 		}
 		$blocks = checkBlockUser($openid, TRADE_NO);
 		if($blocks) return $blocks;
@@ -181,6 +265,9 @@ class sandpay_plugin
 			$payinfo = self::addOrder('WXPAY','JSAPI',$openid,$wxinfo['appid']);
 		}catch(Exception $ex){
 			return ['type'=>'error','msg'=>'微信支付下单失败！'.$ex->getMessage()];
+		}
+		if($method == 'jsapi'){
+			return ['type'=>'jsapi','data'=>json_encode($payinfo)];
 		}
 
 		if($_GET['d']==1){
@@ -276,13 +363,31 @@ class sandpay_plugin
 
 		if($verifyFlag){
 			$array = json_decode($data, true);
+
+			if($channel['appswitch']==1){
+				$params = [
+					'outReqTime' => date('YmdHis'),
+					'mid' => $channel['appid'],
+					'outOrderNo' => $array['outOrderNo'],
+				];
+				try{
+					$client->execute('/v4/sd-receipts/api/trans/trans.order.query', $params);
+				}catch(Exception $e){
+					//return ['type'=>'error','msg'=>'订单查询失败 '.$ex->getMessage()];
+				}
+				$log = "商户订单号：".TRADE_NO."\r\n异步通知：\r\n".$data."\r\n【订单查询接口】请求报文：\r\n".$client->request_body."\r\n【订单查询接口】响应报文：\r\n".$client->response_body."\r\n\r\n";
+				file_put_contents(PAY_ROOT.'logs/'.date('Ymd').'.log', $log, FILE_APPEND);
+			}
+
 			if($array['orderStatus'] == 'success'){
 				$out_trade_no = $array['outOrderNo'];
 				$trade_no = $array['sandSerialNo'];
 				$money = $array['amount'];
 				$buyer = $array['payer']['payerAccNo'];
+				$bill_trade_no = $array['channelOrderNo'];
+				$bill_mch_trade_no = $array['channelSerialNo'];
 				if($out_trade_no == TRADE_NO){
-					processNotify($order, $trade_no, $buyer);
+					processNotify($order, $trade_no, $buyer, $bill_trade_no, $bill_mch_trade_no);
 				}
 				return ['type'=>'html','data'=>'respCode=000000'];
 			}
@@ -295,6 +400,11 @@ class sandpay_plugin
 		return ['type'=>'page','page'=>'return'];
 	}
 
+	//支付成功页面
+	static public function ok(){
+		return ['type'=>'page','page'=>'ok'];
+	}
+	
 	//退款
 	static public function refund($order){
 		global $channel, $conf;
@@ -314,6 +424,10 @@ class sandpay_plugin
 		try{
 			$client = new SandpayClient($channel['appid'], $channel['appkey'], $channel['appswitch']);
 			$result = $client->execute('/v4/sd-receipts/api/trans/trans.order.refund', $params);
+			if($channel['appswitch']==1){
+				$log = "商户订单号：".$order['trade_no']."\r\n【退货接口】请求报文：\r\n".$client->request_body."\r\n【退货接口】响应报文：\r\n".$client->response_body."\r\n\r\n";
+				file_put_contents(PAY_ROOT.'logs/'.date('Ymd').'.log', $log, FILE_APPEND);
+			}
 			return ['code'=>0, 'trade_no'=>$result['sandSerialNo'], 'refund_fee'=>$result['amount']];
 		}catch(Exception $ex){
 			return ['code'=>-1,'msg'=>$ex->getMessage()];
@@ -369,6 +483,10 @@ class sandpay_plugin
 			$client = new SandpayClient($channel['appid'], $channel['appkey'], $channel['appswitch']);
 			$result = $client->execute('/v4/sd-payment/api/trans/trans.payment.order.create', $params);
 			$status = $result['paymentStatus'] == 'success' ? 1 : 0;
+			if($channel['appswitch']==1){
+				$log = "商户订单号：".$bizParam['out_biz_no']."\r\n【付款接口】请求报文：\r\n".$client->request_body."\r\n【付款接口】响应报文：\r\n".$client->response_body."\r\n\r\n";
+				file_put_contents(PAY_ROOT.'logs/'.date('Ymd').'.log', $log, FILE_APPEND);
+			}
 			return ['code'=>0, 'status'=>$status, 'orderid'=>$result['sandSerialNo'], 'paydate'=>$result['finishedTime']];
 		}catch(Exception $ex){
 			return ['code'=>-1, 'msg'=>$ex->getMessage()];
@@ -390,6 +508,10 @@ class sandpay_plugin
 			$client = new SandpayClient($channel['appid'], $channel['appkey'], $channel['appswitch']);
 			$result = $client->execute('/v4/sd-payment/api/trans/trans.payment.order.query', $params);
 			$status = $result['orderStatus'] == 'success' ? 1 : 0;
+			if($channel['appswitch']==1){
+				$log = "商户订单号：".$bizParam['out_biz_no']."\r\n【付款订单查询接口】请求报文：\r\n".$client->request_body."\r\n【付款订单查询接口】响应报文：\r\n".$client->response_body."\r\n\r\n";
+				file_put_contents(PAY_ROOT.'logs/'.date('Ymd').'.log', $log, FILE_APPEND);
+			}
 			return ['code'=>0, 'status'=>$status];
 		}catch(Exception $ex){
 			return ['code'=>-1, 'msg'=>$ex->getMessage()];
@@ -410,6 +532,10 @@ class sandpay_plugin
 			$client = new SandpayClient($channel['appid'], $channel['appkey'], $channel['appswitch']);
 			$result = $client->execute('/v4/sd-payment/api/trans/trans.payment.balance.query', $params);
 			$account = $result['accountList'][0];
+			if($channel['appswitch']==1){
+				$log = "商户订单号：".$bizParam['out_biz_no']."\r\n【余额查询接口】请求报文：\r\n".$client->request_body."\r\n【余额查询接口】响应报文：\r\n".$client->response_body."\r\n\r\n";
+				file_put_contents(PAY_ROOT.'logs/'.date('Ymd').'.log', $log, FILE_APPEND);
+			}
 			if(empty($account)) return ['code'=>-1, 'msg'=>'未查询到账户信息'];
 			return  ['code'=>0, 'amount'=>$account['availableBal'], 'msg'=>'当前账户可用余额：'.$account['availableBal'].' 元，冻结金额：'.$account['frozenBal'].'，在途余额：'.$account['transitBal']];
 		}catch(Exception $ex){

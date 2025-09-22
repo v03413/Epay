@@ -74,7 +74,7 @@ if($_GET['code'] && ($conf['login_qq']==1 || $conf['login_qq']==3 || $conf['logi
 		}
 	}
 
-	$userrow=$DB->getRow("SELECT * FROM pre_user WHERE {$typecolumn}='{$openid}' limit 1");
+	$userrow=$DB->getRow("SELECT * FROM pre_user WHERE {$typecolumn}=:openid limit 1", [':openid'=>$openid]);
 	if($userrow){
 		$uid=$userrow['uid'];
 		$key=$userrow['key'];
@@ -90,7 +90,7 @@ if($_GET['code'] && ($conf['login_qq']==1 || $conf['login_qq']==3 || $conf['logi
 		$DB->exec("update `pre_user` set `lasttime`=NOW() where `uid`='$uid'");
 		exit("<script language='javascript'>window.location.href='./';</script>");
 	}elseif($islogin2==1){
-		$sds=$DB->exec("update `pre_user` set `{$typecolumn}`='$openid' where `uid`='$uid'");
+		$sds=$DB->exec("update `pre_user` set `{$typecolumn}`=:openid where `uid`='$uid'", [':openid'=>$openid]);
 		@header('Content-Type: text/html; charset=UTF-8');
 		exit("<script language='javascript'>alert('已成功绑定{$typename}！');window.location.href='./editinfo.php';</script>");
 	}else{
@@ -114,9 +114,8 @@ if($_GET['code'] && ($conf['login_qq']==1 || $conf['login_qq']==3 || $conf['logi
 <title>QQ扫码登录 | <?php echo $conf['sitename']?></title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
 <link rel="stylesheet" href="<?php echo $cdnpublic?>twitter-bootstrap/3.4.1/css/bootstrap.min.css" type="text/css" />
-<link rel="stylesheet" href="<?php echo $cdnpublic?>animate.css/3.5.2/animate.min.css" type="text/css" />
+<link rel="stylesheet" href="<?php echo $cdnpublic?>animate.css/3.7.2/animate.min.css" type="text/css" />
 <link rel="stylesheet" href="<?php echo $cdnpublic?>font-awesome/4.7.0/css/font-awesome.min.css" type="text/css" />
-<link rel="stylesheet" href="<?php echo $cdnpublic?>simple-line-icons/2.4.1/css/simple-line-icons.min.css" type="text/css" />
 <link rel="stylesheet" href="./assets/css/font.css" type="text/css" />
 <link rel="stylesheet" href="./assets/css/app.css" type="text/css" />
 <style>input:-webkit-autofill{-webkit-box-shadow:0 0 0px 1000px white inset;-webkit-text-fill-color:#333;}img.logo{width:14px;height:14px;margin:0 5px 0 3px;}</style>
@@ -158,7 +157,7 @@ if($_GET['code'] && ($conf['login_qq']==1 || $conf['login_qq']==3 || $conf['logi
 </div>
 <script src="<?php echo $cdnpublic?>jquery/3.4.1/jquery.min.js"></script>
 <script src="<?php echo $cdnpublic?>twitter-bootstrap/3.4.1/js/bootstrap.min.js"></script>
-<script src="<?php echo $cdnpublic?>layer/3.1.1/layer.min.js"></script>
+<script src="<?php echo $cdnpublic?>layer/3.1.1/layer.js"></script>
 <script src="./assets/js/qrlogin.js"></script>
 </body>
 </html>

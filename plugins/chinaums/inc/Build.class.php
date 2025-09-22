@@ -29,17 +29,38 @@ class ChinaumsBuild
 		return $arr;
 	}
 
+	// 发起支付GET
+	public function requestGet($path, $params, $time){
+		$url = $this->gateway.$path;
+		$json = json_encode($params);
+		$query = [
+			'authorization' => 'OPEN-FORM-PARAM',
+			'appId' => $this->appid,
+			'timestamp' => date('YmdHis', $time),
+			'nonce' => md5(uniqid(mt_rand(), true)),
+			'content' => $json
+		];
+		$query['signature'] = $this->getSignature($query['timestamp'], $query['nonce'], $query['content']);
+		return $url . '?' . http_build_query($query);
+	}
+
 	// 获取Authorization
-	private function getOpenBodySig($json, $time){
+	private function getOpenBodySig($body, $time){
 
 		$timestamp = date('YmdHis', $time);
 		$nonce = md5(uniqid(mt_rand(), true));
-		$hash = hash('sha256', $json);
+		$signature = $this->getSignature($timestamp, $nonce, $body);
+		$authorization = 'OPEN-BODY-SIG AppId="'.$this->appid.'", Timestamp="'.$timestamp.'", Nonce="'.$nonce.'", Signature="'.$signature.'"';
+		return $authorization;
+	}
+
+	// 获取Signature
+	private function getSignature($timestamp, $nonce, $body){
+		$hash = hash('sha256', $body);
 		$str = $this->appid.$timestamp.$nonce.$hash;
 		$hash = hash_hmac('sha256', $str, $this->appkey, true);
 		$signature = base64_encode($hash);
-		$authorization = 'OPEN-BODY-SIG AppId="'.$this->appid.'", Timestamp="'.$timestamp.'", Nonce="'.$nonce.'", Signature="'.$signature.'"';
-		return $authorization;
+		return $signature;
 	}
 
 	// 发送请求

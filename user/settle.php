@@ -38,7 +38,8 @@ include './head.php';
   </div>
 
 <?php include 'foot.php';?>
-<script src="<?php echo $cdnpublic?>layer/3.1.1/layer.min.js"></script>
+<script src="<?php echo $cdnpublic?>layer/3.1.1/layer.js"></script>
+<script src="<?php echo $cdnpublic?>jquery.qrcode/1.0/jquery.qrcode.min.js"></script>
 <script src="../assets/js/bootstrap-table.min.js"></script>
 <script src="../assets/js/bootstrap-table-page-jump-to.min.js"></script>
 <script src="../assets/js/custom.js"></script>
@@ -68,6 +69,8 @@ $(document).ready(function(){
 						typename='QQ钱包';
 					}else if(value == '4'){
 						typename='银行卡';
+					}else if(value == '5'){
+						typename='支付机构';
 					}
 					if(row.auto!=1) typename+='<small>[手动]</small>'
 					return typename;
@@ -81,14 +84,14 @@ $(document).ready(function(){
 				field: 'money',
 				title: '结算金额',
 				formatter: function(value, row, index) {
-					return '￥<b>'+value+'</b>';
+					return '¥<b>'+value+'</b>';
 				}
 			},
 			{
 				field: 'realmoney',
 				title: '实际到账',
 				formatter: function(value, row, index) {
-					return '￥<b>'+value+'</b>';
+					return '¥<b>'+value+'</b>';
 				}
 			},
 			{
@@ -100,7 +103,7 @@ $(document).ready(function(){
 				title: '状态',
 				formatter: function(value, row, index) {
 					if(value == '1'){
-						return '<font color=green>已完成</font>';
+						return '<font color=green>已完成</font>' + (row.jumpurl ? '<br/><a href="javascript:showQrcode(\''+row.jumpurl+'\')" class="btn btn-xs btn-success"><i class="fa fa-qrcode"></i> 确认收款</a>' : '');
 					}else if(value == '2'){
 						return '<font color=orange>正在结算</font>';
 					}else if(value == '3'){
@@ -130,6 +133,25 @@ function showResult(id) {
 		error:function(data){
 			layer.msg('服务器错误');
 			return false;
+		}
+	});
+}
+function showQrcode(url){
+	layer.open({
+		type: 1,
+		title: '收款方使用微信扫描以下二维码',
+		skin: 'layui-layer-demo',
+		shadeClose: true,
+		content: '<div id="qrcode" class="list-group-item text-center"></div>',
+		success: function(){
+			$('#qrcode').qrcode({
+				text: url,
+				width: 230,
+				height: 230,
+				foreground: "#000000",
+				background: "#ffffff",
+				typeNumber: -1
+			});
 		}
 	});
 }

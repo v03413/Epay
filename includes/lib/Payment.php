@@ -53,7 +53,7 @@ class Payment {
 
     // 页面支付返回信息
     static public function echoDefault($result){
-        global $cdnpublic,$order,$conf,$sitename,$ordername;
+        global $cdnpublic,$order,$conf,$sitename,$ordername,$siteurl;
         $type = $result['type'];
         if(!$type) return false;
         switch($type){
@@ -83,6 +83,20 @@ class Payment {
                 include PAYPAGE_ROOT.$result['page'].'.php';
                 break;
             case 'qrcode': //扫码页面
+                if($result['page'] == 'alipay_qrcode' && !empty($conf['alipay_qrcode_url'])){
+                    if(strpos($result['url'], $siteurl)===0){
+                        $result['url'] = $conf['alipay_qrcode_url'].substr($result['url'], strlen($siteurl));
+                    }elseif(!empty($conf['localurl_alipay']) && strpos($result['url'], $conf['localurl_alipay'])===0){
+                        $result['url'] = $conf['alipay_qrcode_url'].substr($result['url'], strlen($conf['localurl_alipay']));
+                    }
+                }
+                if($result['page'] == 'wxpay_qrcode' && !empty($conf['wxpay_qrcode_url'])){
+                    if(strpos($result['url'], $siteurl)===0){
+                        $result['url'] = $conf['wxpay_qrcode_url'].substr($result['url'], strlen($siteurl));
+                    }elseif(!empty($conf['localurl_wxpay']) && strpos($result['url'], $conf['localurl_wxpay'])===0){
+                        $result['url'] = $conf['wxpay_qrcode_url'].substr($result['url'], strlen($conf['localurl_wxpay']));
+                    }
+                }
             case 'scheme': //跳转urlscheme页面
                 if($result['page'] == 'wxpay_mini') $result['page'] = 'wxpay_h5';
                 include_once SYSTEM_ROOT.'txprotect.php';
@@ -102,6 +116,7 @@ class Payment {
                 returnTemplate($result['url']);
                 break;
             case 'error': //错误提示
+                self::check_error_msg($result['msg']);
                 sysmsg($result['msg']);
                 break;
             default:break;
@@ -110,7 +125,7 @@ class Payment {
 
     // API支付返回信息
     static public function echoJson($result){
-        global $order,$siteurl;
+        global $order,$siteurl,$conf;
         if(!$result) return false;
         $type = $result['type'];
         if(!$type) return false;
@@ -126,6 +141,16 @@ class Payment {
                     $json['pay_info'] = $result['data'];
                     break;
                 case 'qrcode': //扫码支付
+                    if($result['page'] == 'alipay_qrcode' && !empty($conf['alipay_qrcode_url'])){
+                        if(strpos($result['url'], $siteurl)===0){
+                            $result['url'] = $conf['alipay_qrcode_url'].substr($result['url'], strlen($siteurl));
+                        }
+                    }
+                    if($result['page'] == 'wxpay_qrcode' && !empty($conf['wxpay_qrcode_url'])){
+                        if(strpos($result['url'], $siteurl)===0){
+                            $result['url'] = $conf['wxpay_qrcode_url'].substr($result['url'], strlen($siteurl));
+                        }
+                    }
                     $json['pay_type'] = 'qrcode';
                     $json['pay_info'] = $result['url'];
                     break;
@@ -145,9 +170,18 @@ class Payment {
                     $json['pay_type'] = 'scan';
                     $json['pay_info'] = $result['data'];
                     break;
+                case 'wxplugin': //微信小程序插件支付
+                    $json['pay_type'] = 'wxplugin';
+                    $json['pay_info'] = $result['data'];
+                    break;
+                case 'wxapp': //跳转微信小程序支付
+                    $json['pay_type'] = 'wxapp';
+                    $json['pay_info'] = $result['data'];
+                    break;
                 case 'error':
                     $json['code'] = -2;
                     $json['msg'] = $result['msg'];
+                    self::check_error_msg($result['msg']);
                     break;
                 default:
                     $json['pay_type'] = 'jump';
@@ -171,6 +205,16 @@ class Payment {
                     $json['html'] = $result['data'];
                     break;
                 case 'qrcode': //扫码支付
+                    if($result['page'] == 'alipay_qrcode' && !empty($conf['alipay_qrcode_url'])){
+                        if(strpos($result['url'], $siteurl)===0){
+                            $result['url'] = $conf['alipay_qrcode_url'].substr($result['url'], strlen($siteurl));
+                        }
+                    }
+                    if($result['page'] == 'wxpay_qrcode' && !empty($conf['wxpay_qrcode_url'])){
+                        if(strpos($result['url'], $siteurl)===0){
+                            $result['url'] = $conf['wxpay_qrcode_url'].substr($result['url'], strlen($siteurl));
+                        }
+                    }
                     $json['qrcode'] = $result['url'];
                     break;
                 case 'scheme': //小程序H5跳转
@@ -179,6 +223,7 @@ class Payment {
                 case 'error':
                     $json['code'] = -2;
                     $json['msg'] = $result['msg'];
+                    self::check_error_msg($result['msg']);
                     break;
                 default:
                     $json['payurl'] = $siteurl.'pay/submit/'.TRADE_NO.'/';
@@ -188,24 +233,80 @@ class Payment {
         }
     }
 
+    static private function check_error_msg($msg){
+        global $conf, $channel, $DB;
+        if(!empty($conf['check_paymsg']) && isset($channel)){
+            $msglist = explode('|', $conf['check_paymsg']);
+            foreach($msglist as $v){
+                if(strpos($msg, $v) !== false){
+                    if(!empty($channel['subid'])){
+                        if($DB->exec("UPDATE pre_subchannel SET status=0 WHERE id='{$channel['subid']}'")){
+                            if($conf['check_paymsg_notice'] == 1){
+                                $title = $conf['sitename'].' - 子通道自动关闭提醒';
+                                $content = '尊敬的管理员：支付通道“'.$channel['name'].'”下的子通道“'.$channel['subname'].'”因用户下单时出现异常提示“'.$msg.'”，已被系统自动关闭！<br/>----------<br/>'.$conf['sitename'].'<br/>'.date('Y-m-d H:i:s');
+                                if($conf['msgconfig_risk'] == 1 && !empty($conf['msgrobot_url'])){
+                                    \lib\MsgNotice::robot_webhook($conf['msgrobot_url'], $title, $content, true);
+                                }else{
+                                    $mail_name = $conf['mail_recv']?$conf['mail_recv']:$conf['mail_name'];
+                                    send_mail($mail_name,$title,$content);
+                                }
+                            }
+                        }
+                    }else{
+                        if($DB->exec("UPDATE pre_channel SET status=0 WHERE id='{$channel['id']}'")){
+                            if($conf['check_paymsg_notice'] == 1){
+                                $title = $conf['sitename'].' - 支付通道自动关闭提醒';
+                                $content = '尊敬的管理员：支付通道“'.$channel['name'].'”因用户下单时出现异常提示“'.$msg.'”，已被系统自动关闭！<br/>----------<br/>'.$conf['sitename'].'<br/>'.date('Y-m-d H:i:s');
+                                if($conf['msgconfig_risk'] == 1 && !empty($conf['msgrobot_url'])){
+                                    \lib\MsgNotice::robot_webhook($conf['msgrobot_url'], $title, $content, true);
+                                }else{
+                                    $mail_name = $conf['mail_recv']?$conf['mail_recv']:$conf['mail_name'];
+                                    send_mail($mail_name,$title,$content);
+                                }
+                            }
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
     // 订单回调处理
-    static public function processOrder($isnotify, $order, $api_trade_no, $buyer){
+    static public function processOrder($isnotify, $order, $api_trade_no, $buyer = null, $bill_trade_no = null, $bill_mch_trade_no = null, $end_time = null){
         global $DB,$conf,$siteurl;
         if($order['status']==0 || $order['status']==4){
             if($DB->exec("UPDATE `pre_order` SET `status`=1 WHERE `trade_no`='".$order['trade_no']."'")){
 
                 $data = ['endtime'=>'NOW()', 'date'=>'CURDATE()'];
-                if(!empty($api_trade_no)) $data['api_trade_no'] = $api_trade_no;
-                if(!empty($buyer)) $data['buyer'] = $buyer;
+                if(!empty($api_trade_no)){
+                    $data['api_trade_no'] = $api_trade_no;
+                    $order['api_trade_no'] = $api_trade_no;
+                }
+                if(!empty($buyer) && empty($order['buyer'])){
+                    $data['buyer'] = $buyer;
+                    $order['buyer'] = $buyer;
+                }
+                if(!empty($bill_trade_no)) $data['bill_trade_no'] = $bill_trade_no;
+                if(!empty($bill_mch_trade_no)) $data['bill_mch_trade_no'] = $bill_mch_trade_no;
+                if(!empty($end_time)){
+                    $data['endtime'] = $end_time;
+                    $date['date'] = date('Y-m-d', strtotime($end_time));
+                }
                 if($order['settle']>0) $data['settle'] = $order['settle'];
                 $DB->update('order', $data, ['trade_no'=>$order['trade_no']]);
-                $order['api_trade_no'] = $api_trade_no;
 
                 processOrder($order, $isnotify);
             }
         }elseif(empty($order['api_trade_no']) && !empty($api_trade_no)){
             $data = ['api_trade_no'=>$api_trade_no];
-            if(!empty($buyer)) $data['buyer'] = $buyer;
+            if(!empty($buyer) && empty($order['buyer'])) $data['buyer'] = $buyer;
+            if(!empty($bill_trade_no)) $data['bill_trade_no'] = $bill_trade_no;
+            if(!empty($bill_mch_trade_no)) $data['bill_mch_trade_no'] = $bill_mch_trade_no;
+            if(!empty($end_time)){
+                $data['endtime'] = $end_time;
+                $data['date'] = date('Y-m-d', strtotime($end_time));
+            }
             $DB->update('order', $data, ['trade_no'=>$order['trade_no']]);
         }elseif(empty($order['buyer']) && !empty($buyer)){
             $data['buyer'] = $buyer;
@@ -216,7 +317,7 @@ class Payment {
         }
         if(!$isnotify){
             include_once SYSTEM_ROOT.'txprotect.php';
-            if($order['status'] == 2){
+            if($order['status'] == 2 || $order['black']){
                 $jumpurl = '/payerr.html';
                 returnTemplate($jumpurl);
                 return;
@@ -248,9 +349,17 @@ class Payment {
     }
 
     // 更新合单状态
-    static public function updateOrderCombine($trade_no){
+    static public function updateOrderCombine($trade_no, $sub_orders = null){
         global $DB;
         $DB->update('order', ['combine'=>1], ['trade_no'=>$trade_no]);
+        if(!empty($sub_orders)){
+            $DB->delete('suborder', ['trade_no'=>$trade_no]);
+            foreach($sub_orders as $data){
+                $data['trade_no'] = $trade_no;
+                $data['status'] = 0;
+                $DB->insert('suborder', $data);
+            }
+        }
     }
 
     // 更新订单分账接收人
@@ -258,9 +367,14 @@ class Payment {
         global $DB;
         $support_plugins = \lib\ProfitSharing\CommUtil::$plugins;
         if(in_array($plugin, $support_plugins)){
-            $psreceiver = $DB->getRow("SELECT * FROM `pre_psreceiver` WHERE `channel`='{$order['channel']}' AND `uid`='{$order['uid']}' AND `status`=1");
-            if(!$psreceiver) $psreceiver = $DB->getRow("SELECT * FROM `pre_psreceiver` WHERE `channel`='{$order['channel']}' AND `uid` IS NULL AND `status`=1");
+            $psreceiver = null;
+            if($order['subchannel'] > 0){
+                $psreceiver = $DB->getRow("SELECT * FROM `pre_psreceiver` WHERE `channel`='{$order['channel']}' AND `uid`='{$order['uid']}' AND `subchannel`='{$order['subchannel']}' AND `status`=1 ORDER BY id ASC LIMIT 1");
+            }
+            if(!$psreceiver) $psreceiver = $DB->getRow("SELECT * FROM `pre_psreceiver` WHERE `channel`='{$order['channel']}' AND `uid`='{$order['uid']}' AND `status`=1 ORDER BY id ASC LIMIT 1");
+            if(!$psreceiver) $psreceiver = $DB->getRow("SELECT * FROM `pre_psreceiver` WHERE `channel`='{$order['channel']}' AND `uid` IS NULL AND `status`=1 ORDER BY id ASC LIMIT 1");
             if($psreceiver){
+                if($psreceiver['subchannel'] > 0 && $order['subchannel']!=$psreceiver['subchannel']) return 0;
                 if(!$psreceiver['minmoney'] || $order['realmoney']>=$psreceiver['minmoney']){
                     $DB->update('order', ['profits'=>$psreceiver['id']], ['trade_no'=>$order['trade_no']]);
                     return intval($psreceiver['id']);
@@ -270,73 +384,102 @@ class Payment {
         return 0;
     }
 
-    // 更新订单分账接收人2
-    static public function updateOrderProfits2($order, $plugin){
-        return;
-        global $DB;
-        $support_plugins = \lib\ProfitSharing\CommUtil::$plugins2;
-        if(in_array($plugin, $support_plugins)){
-            $psreceiver = $DB->getRow("SELECT * FROM `pre_psreceiver2` WHERE `channel`='{$order['channel']}' AND `uid`='{$order['uid']}' AND `status`=1");
-            if(!$psreceiver) $psreceiver = $DB->getRow("SELECT * FROM `pre_psreceiver2` WHERE `channel`='{$order['channel']}' AND `uid` IS NULL AND `status`=1");
-            if($psreceiver){
-                if(!$psreceiver['minmoney'] || $order['realmoney']>=$psreceiver['minmoney']){
-                    $DB->update('order', ['profits2'=>$psreceiver['id']], ['trade_no'=>$order['trade_no']]);
-                    return intval($psreceiver['id']);
-                }
-            }
-        }
-        return 0;
-    }
-
     //支付宝直付通确认结算
-    public static function alipaydSettle($trade_no, $api_trade_no, $realmoney, $combine = 0, $ext = null){
-        global $channel;
+    public static function alipaydSettle($channel, $order){
         $alipay_config = require(PLUGIN_ROOT.'alipayd/inc/config.php');
         $alipaySevice = new \Alipay\AlipayTradeService($alipay_config);
-        if($combine == 1){
-            if(!$ext) throw new Exception('子单支付结果数据不存在');
-            $sub_orders = unserialize($ext);
+        if($order['combine'] == 1){
+            $sub_orders = self::getSubOrders($order['trade_no']);
+            if(empty($sub_orders)) throw new Exception('子订单数据不存在');
             $failnum = 0;
             $errmsg = '';
-            foreach($sub_orders as &$sub_order){
+            foreach($sub_orders as $sub_order){
                 if($sub_order['settle'] == 0){
+                    $settle = 0;
                     try{
-                        $alipaySevice->settle_confirm($sub_order['trade_no'], $sub_order['total_amount']);
-                        $sub_order['settle'] == 1;
+                        $alipaySevice->settle_confirm($sub_order['api_trade_no'], $sub_order['money']);
+                        $settle = 1;
                     }catch(Exception $e){
-                        $failnum++;
-                        $errmsg .= $e->getMessage().',';
+                        if(strpos($e->getMessage(), 'ALREADY_CONFIRM_SETTLE')!==false){
+                            $settle = 1;
+                        }else{
+                            $failnum++;
+                            $errmsg .= $e->getMessage().',';
+                        }
                     }
+                    if($settle == 1) self::updateSubOrderSettle($sub_order['sub_trade_no'], 1);
                 }
             }
-            \lib\Payment::updateOrderExt($trade_no, $sub_orders);
             if($failnum > 0) throw new Exception('部分子单结算失败，失败数量：'.$failnum.'，失败原因：'.$errmsg);
             return true;
         }
-        return $alipaySevice->settle_confirm($api_trade_no, $realmoney);
+        try{
+            $alipaySevice->settle_confirm($order['api_trade_no'], $order['realmoney']);
+            return true;
+        }catch(Exception $e){
+            if(strpos($e->getMessage(), 'ALREADY_CONFIRM_SETTLE')!==false){
+                return true;
+            }else{
+                throw $e;
+            }
+        }
+    }
+
+    //支付宝直付通结算失败处理
+    public static function alipayd_settle_fail($channel, $order, $failmsg){
+        global $conf, $DB;
+        if($conf['alipay_settle_check'] == 1){
+            if(!empty($channel['subid'])){
+                if($DB->exec("UPDATE pre_subchannel SET status=0 WHERE id='{$channel['subid']}'")){
+                    if($conf['alipay_settle_notice'] == 1){
+                        $title = $conf['sitename'].' - 支付宝直付通结算失败提醒';
+                        $content = '尊敬的管理员：支付通道“'.$channel['name'].'”下的子通道“'.$channel['subname'].'”因支付宝直付通结算失败（'.$failmsg.'），已被系统自动关闭！<br/>----------<br/>'.$conf['sitename'].'<br/>'.date('Y-m-d H:i:s');
+                        if($conf['msgconfig_risk'] == 1 && !empty($conf['msgrobot_url'])){
+                            \lib\MsgNotice::robot_webhook($conf['msgrobot_url'], $title, $content, true);
+                        }else{
+                            $mail_name = $conf['mail_recv']?$conf['mail_recv']:$conf['mail_name'];
+                            send_mail($mail_name,$title,$content);
+                        }
+                    }
+                }
+            }else{
+                if($DB->exec("UPDATE pre_channel SET status=0 WHERE id='{$channel['id']}'")){
+                    if($conf['alipay_settle_notice'] == 1){
+                        $title = $conf['sitename'].' - 支付宝直付通结算失败提醒';
+                        $content = '尊敬的管理员：支付通道“'.$channel['name'].'”因支付宝直付通结算失败（'.$failmsg.'），已被系统自动关闭！<br/>----------<br/>'.$conf['sitename'].'<br/>'.date('Y-m-d H:i:s');
+                        if($conf['msgconfig_risk'] == 1 && !empty($conf['msgrobot_url'])){
+                            \lib\MsgNotice::robot_webhook($conf['msgrobot_url'], $title, $content, true);
+                        }else{
+                            $mail_name = $conf['mail_recv']?$conf['mail_recv']:$conf['mail_name'];
+                            send_mail($mail_name,$title,$content);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     //微信收付通确认结算
-    public static function wxpaynpSettle($trade_no, $api_trade_no, $profits){
-        global $channel;
+    public static function wxpaynpSettle($channel, $order){
         $wechatpay_config = require(PLUGIN_ROOT.'/wxpaynp/inc/config.php');
         if($wechatpay_config['ecommerce']){
-            if(!$profits){
+            if(!$order['profits']){
                 $client = new \WeChatPay\V3\ProfitsharingService($wechatpay_config);
-                return $client->unfreeze($trade_no, $api_trade_no);
+                return $client->unfreeze($order['trade_no'], $order['api_trade_no']);
             }else{
                 throw new Exception('当前订单需要分账，请进入分账订单页面确认分账');
             }
         }else{
-            throw new Exception('非电商收付通订单');
+            throw new Exception('非平台收付通订单');
         }
     }
 
     //支付宝预授权资金支付
-    public static function alipayPreAuthPay($trade_no){
-        global $channel, $order, $conf;
+    public static function alipayPreAuthPay($channel, $order){
+        global $conf;
         $alipay_config = require(PLUGIN_ROOT.$channel['plugin'].'/inc/config.php');
         $alipaySevice = new \Alipay\AlipayTradeService($alipay_config);
+        $trade_no = $order['trade_no'];
         $bizContent = [
             'out_order_no' => $trade_no,
             'out_request_no' => $trade_no,
@@ -363,10 +506,10 @@ class Payment {
     }
 
     //支付宝预授权资金解冻
-    public static function alipayUnfreeze($trade_no){
-        global $channel;
+    public static function alipayUnfreeze($channel, $order){
         $alipay_config = require(PLUGIN_ROOT.$channel['plugin'].'/inc/config.php');
         $alipaySevice = new \Alipay\AlipayTradeService($alipay_config);
+        $trade_no = $order['trade_no'];
         $bizContent = [
             'out_order_no' => $trade_no,
             'out_request_no' => $trade_no,
@@ -390,8 +533,7 @@ class Payment {
     }
 
     //支付宝红包转账
-    public static function alipayRedPacketTransfer($payee_user_id, $money, $order_id){
-        global $channel, $conf;
+    public static function alipayRedPacketTransfer($channel, $payee_user_id, $money, $order_id){
         $out_biz_no = date("YmdHis").rand(11111,99999);
         $alipay_config = require(PLUGIN_ROOT.$channel['plugin'].'/inc/config.php');
         $alipaySevice = new \Alipay\AlipayTransferService($alipay_config);
@@ -399,8 +541,7 @@ class Payment {
     }
 
     //支付宝红包资金退回
-    public static function alipayRedPacketRefund($trade_no, $money){
-        global $channel;
+    public static function alipayRedPacketRefund($channel, $trade_no, $money){
         $out_biz_no = date("YmdHis").rand(11111,99999);
         $alipay_config = require(PLUGIN_ROOT.$channel['plugin'].'/inc/config.php');
         $alipaySevice = new \Alipay\AlipayTransferService($alipay_config);
@@ -470,5 +611,59 @@ class Payment {
         }catch(\Exception $e){
             sysmsg($e->getMessage());
         }
+    }
+
+    //支付宝直付通&微信收付通延迟结算处理
+    public static function settle_task(){
+        global $DB;
+        $orders = $DB->getAll("SELECT A.*,B.plugin FROM pre_order A LEFT JOIN pre_channel B ON A.channel=B.id WHERE A.status=1 AND A.settle=1 AND A.addtime<DATE_SUB(NOW(), INTERVAL 24 HOUR) AND B.plugin in ('alipayd','wxpaynp') ORDER BY A.trade_no ASC LIMIT 10");
+        foreach($orders as $row){
+            $trade_no = $row['trade_no'];
+            $channel = $row['subchannel'] > 0 ? \lib\Channel::getSub($row['subchannel']) : \lib\Channel::get($row['channel'], $DB->findColumn('user', 'channelinfo', ['uid'=>$row['uid']]));
+            if(!$channel) continue;
+            try{
+                if($row['plugin'] == 'alipayd'){
+                    self::alipaydSettle($channel, $row);
+                }elseif($row['plugin'] == 'wxpaynp'){
+                    self::wxpaynpSettle($channel, $row);
+                }
+                $DB->update('order', ['settle'=>2], ['trade_no'=>$trade_no]);
+                echo $trade_no.' 结算成功<br/>';
+            }catch(Exception $e){
+                $errmsg = $e->getMessage();
+                if(strpos($errmsg, 'ALREADY_CONFIRM_SETTLE')){
+                    $DB->update('order', ['settle'=>2], ['trade_no'=>$trade_no]);
+                    echo $trade_no.' 结算成功<br/>';
+                    continue;
+                }
+                $DB->update('order', ['settle'=>3], ['trade_no'=>$trade_no]);
+                echo $trade_no.' 结算失败,'.$errmsg.'<br/>';
+                if($row['plugin'] == 'alipayd'){
+                    \lib\Payment::alipayd_settle_fail($channel, $row, $errmsg);
+                }
+            }
+        }
+    }
+
+    public static function getSubOrders($trade_no){
+        global $DB;
+        return $DB->getAll("SELECT * FROM pre_suborder WHERE trade_no=:trade_no", [':trade_no'=>$trade_no]);
+    }
+
+    public static function processSubOrders($trade_no, $sub_orders){
+        global $DB;
+        foreach($sub_orders as $data){
+            $DB->update('suborder', ['status'=>1, 'api_trade_no'=>$data['api_trade_no']], ['sub_trade_no'=>$data['sub_trade_no']]);
+        }
+    }
+
+    public static function refundSubOrder($sub_trade_no, $refundmoney = null){
+        global $DB;
+        $DB->update('suborder', ['status'=>2, 'refundmoney'=>$refundmoney], ['sub_trade_no'=>$sub_trade_no]);
+    }
+
+    public static function updateSubOrderSettle($sub_trade_no, $settle){
+        global $DB;
+        $DB->update('suborder', ['settle'=>$settle], ['sub_trade_no'=>$sub_trade_no]);
     }
 }

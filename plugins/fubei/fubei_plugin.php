@@ -24,9 +24,18 @@ class fubei_plugin
 				'type' => 'input',
 				'note' => '',
 			],
+			'mchid' => [
+				'name' => '商户ID',
+				'type' => 'input',
+				'note' => '',
+			],
 		],
 		'select' => null,
-		'note' => '', //支付密钥填写说明
+		'select_alipay' => [
+			'1' => '生活号支付',
+			'2' => 'H5支付',
+		],
+		'note' => '如果是微信支付，需要<a href="./plugin_page.php?channel=[channel]&func=wxconfig" target="_blank">配置绑定AppId和支付目录</a>', //支付密钥填写说明
 		'bindwxmp' => true, //是否支持绑定微信公众号
 		'bindwxa' => false, //是否支持绑定微信小程序
 	];
@@ -35,7 +44,13 @@ class fubei_plugin
 		global $siteurl, $channel, $order, $sitename;
 
 		if($order['typename']=='alipay'){
-			return ['type'=>'jump','url'=>'/pay/alipay/'.TRADE_NO.'/'];
+			if(checkmobile() && in_array('2',$channel['apptype'])){
+				return ['type'=>'jump','url'=>'/pay/alipaywap/'.TRADE_NO.'/'];
+			}elseif(checkalipay() && in_array('1',$channel['apptype'])){
+				return ['type'=>'jump','url'=>'/pay/alipayjs/'.TRADE_NO.'/?d=1'];
+			}else{
+				return ['type'=>'jump','url'=>'/pay/alipay/'.TRADE_NO.'/'];
+			}
 		}elseif($order['typename']=='wxpay'){
 			if(checkwechat()){
 				return ['type'=>'jump','url'=>'/pay/wxjspay/'.TRADE_NO.'/?d=1'];
@@ -48,10 +63,25 @@ class fubei_plugin
 	}
 
 	static public function mapi(){
-		global $siteurl, $channel, $order, $conf, $device, $mdevice;
+		global $siteurl, $channel, $order, $conf, $device, $mdevice, $method;
 
-		if($order['typename']=='alipay'){
-			return self::alipay();
+		if($method=='jsapi'){
+			if($order['typename']=='alipay'){
+				return self::alipayjs();
+			}elseif($order['typename']=='wxpay'){
+				return self::wxjspay();
+			}
+		}elseif($method == 'applet'){
+			return self::wxplugin();
+		}
+		elseif($order['typename']=='alipay'){
+			if($device=='mobile' && in_array('2',$channel['apptype'])){
+				return ['type'=>'jump','url'=>'/pay/alipaywap/'.TRADE_NO.'/'];
+			}elseif($mdevice=='alipay' && in_array('1',$channel['apptype'])){
+				return ['type'=>'jump','url'=>$siteurl.'pay/alipayjs/'.TRADE_NO.'/?d=1'];
+			}else{
+				return self::alipay();
+			}
 		}elseif($order['typename']=='wxpay'){
 			if($mdevice=='wechat'){
 				return ['type'=>'jump','url'=>$siteurl.'pay/wxjspay/'.TRADE_NO.'/?d=1'];
@@ -68,6 +98,7 @@ class fubei_plugin
 		require_once(PAY_ROOT.'inc/FubeiClient.class.php');
 
 		$bizContent = [
+			'merchant_id' => $channel['mchid'],
 			'merchant_order_sn' => TRADE_NO,
 			'pay_type' => $pay_type,
 			'total_amount' => $order['realmoney'],
@@ -93,6 +124,7 @@ class fubei_plugin
 		require_once(PAY_ROOT.'inc/FubeiClient.class.php');
 
 		$bizContent = [
+			'merchant_id' => $channel['mchid'],
 			'merchant_order_sn' => TRADE_NO,
 			'total_amount' => $order['realmoney'],
 			'store_id' => $channel['appmchid'],
@@ -128,26 +160,39 @@ class fubei_plugin
 
 	//支付宝扫码支付
 	static public function alipay(){
-		global $siteurl;
-		$code_url = $siteurl.'pay/alipayjs/'.TRADE_NO.'/';
+		global $channel, $device, $mdevice, $siteurl;
+		if(in_array('2',$channel['apptype']) && !in_array('1',$channel['apptype'])){
+			$code_url = $siteurl.'pay/alipaywap/'.TRADE_NO.'/';
+		}else{
+			$code_url = $siteurl.'pay/alipayjs/'.TRADE_NO.'/';
+		}
 
-		return ['type'=>'qrcode','page'=>'alipay_qrcode','url'=>$code_url];
+		if(checkalipay() || $mdevice=='alipay'){
+			return ['type'=>'jump','url'=>$code_url];
+		}else{
+			return ['type'=>'qrcode','page'=>'alipay_qrcode','url'=>$code_url];
+		}
 	}
 
 	//支付宝JS支付
 	static public function alipayjs(){
-		if(!isset($_GET['userid'])){
-			$redirect_uri = '/pay/alipayjs/'.TRADE_NO.'/';
-			return ['type'=>'jump','url'=>'/user/oauth.php?state='.urlencode(authcode($redirect_uri, 'ENCODE', SYS_KEY))];
+		global $conf, $method, $order;
+		if(!empty($order['sub_openid'])){
+			$user_id = $order['sub_openid'];
+		}else{
+			[$user_type, $user_id] = alipay_oauth();
 		}
 
-		$blocks = checkBlockUser($_GET['userid'], TRADE_NO);
+		$blocks = checkBlockUser($user_id, TRADE_NO);
 		if($blocks) return $blocks;
 		
 		try{
-			$retData = self::addOrder('alipay', $_GET['userid']);
+			$retData = self::addOrder('alipay', $user_id);
 		}catch(Exception $ex){
 			return ['type'=>'error','msg'=>'支付宝支付下单失败！'.$ex->getMessage()];
+		}
+		if($method == 'jsapi'){
+			return ['type'=>'jsapi','data'=>$retData['prepay_id']];
 		}
 
 		if($_GET['d']=='1'){
@@ -166,15 +211,18 @@ class fubei_plugin
 			return ['type'=>'error','msg'=>'支付宝支付下单失败！'.$ex->getMessage()];
 		}
 		$html = $retData['html'];
+		if(substr($html, 0, 4) == 'http'){
+			return ['type'=>'jump','url'=>$html];
+		}
 		return ['type'=>'html','data'=>$html];
 	}
 
 	//微信扫码支付
 	static public function wxpay(){
-		global $siteurl;
+		global $siteurl, $device;
 		$code_url = $siteurl.'pay/wxjspay/'.TRADE_NO.'/';
 
-		if (checkmobile()) {
+		if (checkmobile() || $device == 'mobile') {
 			return ['type'=>'qrcode','page'=>'wxpay_wap','url'=>$code_url];
 		} else {
 			return ['type'=>'qrcode','page'=>'wxpay_qrcode','url'=>$code_url];
@@ -183,18 +231,28 @@ class fubei_plugin
 
 	//微信公众号支付
 	static public function wxjspay(){
-		global $siteurl,$channel;
+		global $siteurl, $channel, $order, $method;
 
 		if($channel['appwxmp'] > 0){
-			$wxinfo = \lib\Channel::getWeixin($channel['appwxmp']);
-			if(!$wxinfo) return ['type'=>'error','msg'=>'支付通道绑定的微信公众号不存在'];
-			$appid = $wxinfo['appid'];
-	
-			try{
-				$tools = new \WeChatPay\JsApiTool($wxinfo['appid'], $wxinfo['appsecret']);
-				$openid = $tools->GetOpenid();
-			}catch(Exception $e){
-				return ['type'=>'error','msg'=>$e->getMessage()];
+			if(!empty($order['sub_openid'])){
+				if(!empty($order['sub_appid'])){
+					$wxinfo['appid'] = $order['sub_appid'];
+				}else{
+					$wxinfo = \lib\Channel::getWeixin($channel['appwxmp']);
+					if(!$wxinfo) return ['type'=>'error','msg'=>'支付通道绑定的微信公众号不存在'];
+				}
+				$openid = $order['sub_openid'];
+			}else{
+				$wxinfo = \lib\Channel::getWeixin($channel['appwxmp']);
+				if(!$wxinfo) return ['type'=>'error','msg'=>'支付通道绑定的微信公众号不存在'];
+				$appid = $wxinfo['appid'];
+		
+				try{
+					$tools = new \WeChatPay\JsApiTool($wxinfo['appid'], $wxinfo['appsecret']);
+					$openid = $tools->GetOpenid();
+				}catch(Exception $e){
+					return ['type'=>'error','msg'=>$e->getMessage()];
+				}
 			}
 		}else{
 			if(!isset($_GET['open_id'])){
@@ -217,6 +275,9 @@ class fubei_plugin
 		}catch(Exception $ex){
 			return ['type'=>'error','msg'=>'微信支付下单失败！'.$ex->getMessage()];
 		}
+		if($method == 'jsapi'){
+			return ['type'=>'jsapi','data'=>json_encode($retData['sign_package'])];
+		}
 
 		if($_GET['d']=='1'){
 			$redirect_url='data.backurl';
@@ -227,40 +288,56 @@ class fubei_plugin
 		return ['type'=>'page','page'=>'wxpay_jspay','data'=>['jsApiParameters'=>json_encode($retData['sign_package']), 'redirect_url'=>$redirect_url]];
 	}
 
-	//微信参数配置
-	static public function wxconfig(){
-		global $siteurl,$channel;
-
-		require_once(PAY_ROOT.'inc/FubeiClient.class.php');
-		$client = new FubeiClient($channel['appid'], $channel['appkey']);
-
-		$bizContent=[
-			'store_id' => $channel['appmchid'],
-			'jsapi_path' => $siteurl
-		];
+	//微信小程序插件支付
+	static public function wxplugin(){
+		$appId = 'wx21efb7c54d4729d6';
 		try{
-			$retData = $client->execute('fbpay.order.wxconfig', $bizContent);
-			return ['type'=>'error','msg'=>$retData['jsapi_msg']];
+			$result = self::addOrder('wxpay', null, $appId);
+			$payinfo = ['appId'=>$appId, 'orderSn'=>$result['order_sn']];
 		}catch(Exception $e){
-			return ['type'=>'error','msg'=>'微信参数配置失败！'.$e->getMessage()];
+			return ['type'=>'error','msg'=>$e->getMessage()];
 		}
+		return ['type'=>'wxplugin','data'=>$payinfo];
 	}
 
-	//微信参数配置查询
-	static public function wxconfigquery(){
-		global $siteurl,$channel;
+	//微信参数配置
+	static public function wxconfig(){
+		global $siteurl,$channel,$islogin;
+		if(!$islogin) exit('Access Denied');
 
 		require_once(PAY_ROOT.'inc/FubeiClient.class.php');
 		$client = new FubeiClient($channel['appid'], $channel['appkey']);
+
+		if(isset($_POST['sub_appid']) && isset($_POST['jsapi_path'])){
+			$bizContent=[
+				'store_id' => $channel['appmchid'],
+				'sub_appid' => $_POST['sub_appid'],
+				'jsapi_path' => $_POST['jsapi_path']
+			];
+			try{
+				$retData = $client->execute('fbpay.order.wxconfig', $bizContent);
+				$msg = '';
+				if(!empty($retData['sub_appid_msg'])) $msg .= $retData['sub_appid_msg'].'<br/>';
+				if(!empty($retData['jsapi_msg'])) $msg .= $retData['jsapi_msg'];
+				showmsg($msg,1);
+			}catch(Exception $e){
+				showmsg('微信参数配置失败！'.$e->getMessage(),4);
+			}
+		}
+
+		$wxinfo = \lib\Channel::getWeixin($channel['appwxmp']);
 
 		$bizContent=[
 			'store_id' => $channel['appmchid']
 		];
 		try{
 			$retData = $client->execute('fbpay.order.wxconfig.query', $bizContent);
-			return ['type'=>'error','msg'=>'appid_list:'.$retData['appid_list'].',jsapi_path_list:'.$retData['jsapi_path_list']];
+			$appid_list = json_decode($retData['appid_list'], true);
+			$jsapi_path_list = json_decode($retData['jsapi_path_list'], true);
+			$data = ['appid_config_list' => $appid_list['appid_config_list'], 'jsapi_path_list' => $jsapi_path_list['jsapi_path_list'], 'appid'=>$wxinfo ? $wxinfo['appid'] : ''];
+			include PAY_ROOT.'wxconf.page.php';
 		}catch(Exception $e){
-			return ['type'=>'error','msg'=>'微信参数配置失败！'.$e->getMessage()];
+			showmsg('微信参数配置查询失败！'.$e->getMessage(),4);
 		}
 	}
 
@@ -286,12 +363,15 @@ class fubei_plugin
 		if($verify_result){
 			$data = json_decode($_POST["data"], true);
 			if($data['order_status'] == 'SUCCESS'){
-				$out_trade_no = daddslashes($data['merchant_order_sn']);
-				$api_trade_no = daddslashes($data['order_sn']);
+				$out_trade_no = $data['merchant_order_sn'];
+				$api_trade_no = $data['order_sn'];
 				$money = $data['total_amount'];
+				$buyer = $data['user_id'];
+				$bill_trade_no = $data['channel_order_sn'];
+				$bill_mch_trade_no = $data['ins_order_sn'];
 
 				if ($out_trade_no == TRADE_NO && round($money,2)==round($order['realmoney'],2)) {
-					processNotify($order, $api_trade_no);
+					processNotify($order, $api_trade_no, $buyer, $bill_trade_no, $bill_mch_trade_no);
 				}
 				return ['type'=>'html','data'=>'success'];
 			}else{

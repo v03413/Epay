@@ -20,39 +20,23 @@ function check_paytype(){
 		$type='alipay';
 	}elseif(strpos($_SERVER['HTTP_USER_AGENT'], 'QQ/')!==false){
 		$type='qqpay';
+	}elseif(strpos($_SERVER['HTTP_USER_AGENT'], 'UnionPay/')!==false){
+		$type='bank';
 	}
 	return $type;
 }
 
 function alipayOpenId($channel){
-	global $DB,$siteurl;
-	$channel = \lib\Channel::get($channel);
-	if(!$channel)showerror('支付通道不存在');
 	$alipay_config = require(PLUGIN_ROOT.$channel['plugin'].'/inc/config.php');
 	try{
-		$oauth = new \Alipay\AlipayOauthService($alipay_config);
-		if(isset($_GET['auth_code'])){
-			$result = $oauth->getToken($_GET['auth_code']);
-			if(!empty($result['user_id'])){
-				$openid = $result['user_id'];
-			}else{
-				$openid = $result['open_id'];
-			}
-			return $openid;
-		}else{
-			$redirect_uri = $siteurl.'paypage/';
-			$oauth->oauth($redirect_uri);
-		}
+		[$user_type, $user_id] = alipay_oauth($alipay_config);
 	}catch(Exception $e){
-		showerror('支付宝快捷登录失败！'.$e->getMessage());
+		showerror($e->getMessage());
 	}
+	return $user_id;
 }
 
 function weixinOpenId($channel){
-	global $DB;
-	$channel = \lib\Channel::get($channel);
-	if(!$channel)showerror('支付通道不存在');
-	
 	$wxinfo = \lib\Channel::getWeixin($channel['appwxmp']);
 	if(!$wxinfo)showerror('支付通道绑定的微信公众号不存在');
 
@@ -63,4 +47,26 @@ function weixinOpenId($channel){
 		showerror($e->getMessage());
 	}
 	return $openId;
+}
+
+function unionpayOpenId($channel){
+	if(isset($_GET['respCode'])){
+		if($_GET['respCode'] == '00' && isset($_GET['userAuthCode'])){
+			$result = \lib\Plugin::call('get_unionpay_userid', $channel, $_GET['userAuthCode']);
+			if($result['code'] == 0){
+				return $result['data'];
+			}else{
+				showerror('银联用户标识获取失败：'.$result['msg']);
+			}
+		}elseif($_GET['respCode'] == '34'){
+			return '';
+		}else{
+			showerror('银联用户标识获取失败，respCode='.$_GET['respCode']);
+		}
+	}else{
+		$redirect_uri = (is_https() ? 'https://' : 'http://') . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];
+		$url = 'https://qr.95516.com/qrcGtwWeb-web/api/userAuth?version=1.0.0&redirectUrl='.urlencode($redirect_uri);
+		header("Location: $url");
+		exit;
+	}
 }

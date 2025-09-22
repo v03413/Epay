@@ -284,7 +284,7 @@ foreach($paytype as $row){
 <table class="table table-bordered table-hover">
   <thead><tr><th>字段名</th><th>变量名</th><th>类型</th><th>示例值</th><th>描述</th></tr></thead>
   <tbody>
-  <tr><td>返回状态码</td><td>code</td><td>Int</td><td>1</td><td>1为成功，其它值为失败</td></tr>
+  <tr><td>返回状态码</td><td>code</td><td>Int</td><td>0</td><td>0为成功，其它值为失败</td></tr>
   <tr><td>返回信息</td><td>msg</td><td>String</td><td>退款成功</td><td></td></tr>
   </tbody>
 </table>

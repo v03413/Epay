@@ -36,7 +36,7 @@ class AlipayResponseException extends \Exception
         return $this->errCode;
     }
 
-    public function getResponse()
+    public function getResponse(): array
     {
         return $this->res;
     }

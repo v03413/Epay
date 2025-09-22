@@ -32,6 +32,7 @@ case 'login':
 	$type=intval($_POST['type']);
 	$user=trim($_POST['user']);
 	$pass=trim($_POST['pass']);
+	$enc_type = isset($_POST['enc']) ? $_POST['enc'] : '0';
 	if(empty($user) || empty($pass))exit('{"code":-1,"msg":"请确保各项不能为空"}');
 	if(!$_POST['csrf_token'] || $_POST['csrf_token']!=$_SESSION['csrf_token'])exit('{"code":-1,"msg":"CSRF TOKEN ERROR"}');
 
@@ -40,6 +41,15 @@ case 'login':
 		if(!verify_captcha())exit('{"code":-1,"msg":"验证失败，请重新验证"}');
 	}
 
+	if($enc_type == '1'){
+		$plain = '';
+		$private_key = base64ToPem($conf['private_key'], 'PRIVATE KEY');
+		$pkey = openssl_pkey_get_private($private_key);
+		if(!openssl_private_decrypt(base64_decode($pass), $plain, $pkey, OPENSSL_PKCS1_PADDING)){
+			exit(json_encode(['code'=>-1,'msg'=>'密码解密失败']));
+		}
+		$pass = $plain;
+	}
 	if($type==1 && is_numeric($user) && strlen($user)<=6)$type=0;
 	if($type==1){
 		$userrow=$DB->getRow("SELECT * FROM pre_user WHERE email=:user OR phone=:user limit 1", [':user'=>$user]);
@@ -127,13 +137,19 @@ case 'connect':
 	exit(json_encode($result));
 break;
 case 'captcha':
-	$GtSdk = new \lib\GeetestLib($conf['captcha_id'], $conf['captcha_key']);
-	$data = array(
-		'user_id' => isset($uid)?$uid:'public',
-		'client_type' => "web",
-		'ip_address' => $clientip
-	);
-	$result = $GtSdk->pre_process($data);
+	if($conf['captcha_version'] == '1'){
+		$captcha_id = !empty($conf['captcha_id'])?$conf['captcha_id']:'54088bb07d2df3c46b79f80300b0abbe';
+		$result = ['success'=>1, 'gt'=>$captcha_id, 'version'=>1];
+	}else{
+		$GtSdk = new \lib\GeetestLib($conf['captcha_id'], $conf['captcha_key']);
+		$data = array(
+			'user_id' => isset($uid)?$uid:'public',
+			'client_type' => "web",
+			'ip_address' => $clientip
+		);
+		$result = $GtSdk->pre_process($data);
+		$result['version'] = 0;
+	}
 	$_SESSION['gtserver'] = $result['success'];
 	exit(json_encode($result));
 break;
@@ -175,6 +191,7 @@ case 'reg':
 	$code=trim($_POST['code']);
 	$pwd=trim($_POST['pwd']);
 	$invitecode=trim($_POST['invitecode']);
+	$enc_type = isset($_POST['enc']) ? $_POST['enc'] : '0';
 
 	if(isset($_SESSION['reg_submit']) && $_SESSION['reg_submit']>time()-600){
 		exit('{"code":-1,"msg":"请勿频繁注册"}');
@@ -183,6 +200,15 @@ case 'reg':
 		exit('{"code":-1,"msg":"请确保各项不能为空"}');
 	}
 	if(!$_POST['csrf_token'] || $_POST['csrf_token']!=$_SESSION['csrf_token'])exit('{"code":-1,"msg":"CSRF TOKEN ERROR"}');
+	if($enc_type == '1'){
+		$plain = '';
+		$private_key = base64ToPem($conf['private_key'], 'PRIVATE KEY');
+		$pkey = openssl_pkey_get_private($private_key);
+		if(!openssl_private_decrypt(base64_decode($pwd), $plain, $pkey, OPENSSL_PKCS1_PADDING)){
+			exit(json_encode(['code'=>-1,'msg'=>'密码解密失败']));
+		}
+		$pwd = $plain;
+	}
 	if (strlen($pwd) < 6) {
 		exit('{"code":-1,"msg":"密码不能低于6位"}');
 	}elseif ($pwd == $email) {
@@ -313,11 +339,21 @@ case 'findpwd':
 	$account=htmlspecialchars(strip_tags(trim($_POST['account'])));
 	$code=trim($_POST['code']);
 	$pwd=trim($_POST['pwd']);
+	$enc_type = isset($_POST['enc']) ? $_POST['enc'] : '0';
 
 	if(empty($account) || empty($code) || empty($pwd)){
 		exit('{"code":-1,"msg":"请确保各项不能为空"}');
 	}
 	if(!$_POST['csrf_token'] || $_POST['csrf_token']!=$_SESSION['csrf_token'])exit('{"code":-1,"msg":"CSRF TOKEN ERROR"}');
+	if($enc_type == '1'){
+		$plain = '';
+		$private_key = base64ToPem($conf['private_key'], 'PRIVATE KEY');
+		$pkey = openssl_pkey_get_private($private_key);
+		if(!openssl_private_decrypt(base64_decode($pwd), $plain, $pkey, OPENSSL_PKCS1_PADDING)){
+			exit(json_encode(['code'=>-1,'msg'=>'密码解密失败']));
+		}
+		$pwd = $plain;
+	}
 	if (strlen($pwd) < 6) {
 		exit('{"code":-1,"msg":"密码不能低于6位"}');
 	}elseif ($pwd == $account && $verifytype=='email') {

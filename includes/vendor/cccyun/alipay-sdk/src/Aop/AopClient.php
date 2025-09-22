@@ -2,6 +2,8 @@
 
 namespace Alipay\Aop;
 
+use Exception;
+
 class AopClient
 {
     //应用ID
@@ -64,7 +66,7 @@ class AopClient
      * @see https://docs.alipay.com/mini/introduce/aes
      * @see https://docs.alipay.com/mini/introduce/getphonenumber
      */
-    public static function aesDecrypt($content, $aesKey)
+    public static function aesDecrypt(string $content, string $aesKey): string
     {
         return openssl_decrypt($content, 'aes-128-cbc', base64_decode($aesKey));
     }
@@ -77,20 +79,21 @@ class AopClient
      *
      * @return string
      */
-    public static function aesEncrypt($content, $aesKey)
+    public static function aesEncrypt(string $content, string $aesKey): string
     {
         $result = openssl_encrypt($content, 'aes-128-cbc', base64_decode($aesKey));
         return base64_encode($result);
     }
 
-    /**
-     * 发起请求并解析结果
-     *
-     * @param  AlipayRequest  $request
-     * 
-     * @return AlipayResponse
-     */
-    public function execute(AlipayRequest $request)
+	/**
+	 * 发起请求并解析结果
+	 *
+	 * @param AlipayRequest $request
+	 *
+	 * @return AlipayResponse
+	 * @throws Exception
+	 */
+    public function execute(AlipayRequest $request): AlipayResponse
     {
         $params = $this->build($request);
 
@@ -104,27 +107,29 @@ class AopClient
         return $response;
     }
 
-    /**
-     * 生成用于调用收银台SDK的字符串
-     *
-     * @param  AlipayRequest  $request
-     * @return string
-     */
-    public function sdkExecute(AlipayRequest $request)
+	/**
+	 * 生成用于调用收银台SDK的字符串
+	 *
+	 * @param AlipayRequest $request
+	 * @return string
+	 * @throws Exception
+	 */
+    public function sdkExecute(AlipayRequest $request): string
     {
         $params = $this->build($request);
 
         return http_build_query($params);
     }
 
-    /**
-     * 页面提交执行方法
-     *
-     * @param  AlipayRequest  $request
-     * @param  $httpmethod
-     * @return string
-     */
-    public function pageExecute(AlipayRequest $request, $httpmethod = 'POST')
+	/**
+	 * 页面提交执行方法
+	 *
+	 * @param AlipayRequest $request
+	 * @param string $httpmethod
+	 * @return string
+	 * @throws Exception
+	 */
+    public function pageExecute(AlipayRequest $request, string $httpmethod = 'POST'): string
     {
         $params = $this->build($request);
 
@@ -141,7 +146,7 @@ class AopClient
             if (curl_errno($ch) > 0) {
                 $errmsg = curl_error($ch);
                 curl_close($ch);
-                throw new \Exception($errmsg, 0);
+                throw new Exception($errmsg, 0);
             }
             $httpStatusCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
             if ($httpStatusCode == 301 || $httpStatusCode == 302) {
@@ -152,14 +157,13 @@ class AopClient
                 curl_close($ch);
                 $response = mb_convert_encoding($response, 'UTF-8', 'GB2312');
                 if(preg_match('/<div\s+class="Todo">([^<]+)<\/div>/i', $response, $matchers)) {
-                    throw new \Exception($matchers[1]);
+                    throw new Exception($matchers[1]);
                 }
             }
-            throw new \Exception('返回数据解析失败', $httpStatusCode);
+            throw new Exception('返回数据解析失败', $httpStatusCode);
 
         } elseif (strtoupper($httpmethod) == 'GET') {
-            $requestUrl = $this->gatewayUrl.'?'.http_build_query($params);
-            return $requestUrl;
+	        return $this->gatewayUrl.'?'.http_build_query($params);
         } else {
             $url = $this->gatewayUrl.'?charset='.$this->charset;
 
@@ -177,15 +181,16 @@ class AopClient
             return $html;
         }
     }
-    
-    /**
-     * 拼接请求参数并签名.
-     *
-     * @param  AlipayRequest  $request
-     * 
-     * @return array
-     */
-    protected function build(AlipayRequest $request)
+
+	/**
+	 * 拼接请求参数并签名.
+	 *
+	 * @param AlipayRequest $request
+	 *
+	 * @return array
+	 * @throws Exception
+	 */
+    protected function build(AlipayRequest $request): array
     {
         // 组装系统参数
         $sysParams = [];
@@ -230,11 +235,12 @@ class AopClient
         return $sysParams;
     }
 
-    /**
-     * 验证返回内容签名
-     *
-     * @param $response
-     */
+	/**
+	 * 验证返回内容签名
+	 *
+	 * @param AlipayResponse $response
+	 * @throws Exception
+	 */
     protected function verifyResponse(AlipayResponse $response)
     {
         $signData = $response->getSignData();
@@ -249,7 +255,7 @@ class AopClient
                 $checkResult = $this->rsaPubilcVerify($signData, $sign, $this->signType);
             }
             if (!$checkResult) {
-                throw new \Exception('对返回数据使用支付宝公钥验签失败');
+                throw new Exception('对返回数据使用支付宝公钥验签失败');
             }
         }
     }
@@ -261,7 +267,7 @@ class AopClient
      * 
      * @return bool
      */
-    public function verify($params)
+    public function verify($params): bool
     {
         if (!$params || !isset($params['sign'])) {
             return false;
@@ -272,7 +278,7 @@ class AopClient
         $data = $this->getSignContent($params);
         try {
             return $this->rsaPubilcVerify($data, $sign, $this->signType);
-        } catch (\Exception $ex) {
+        } catch (Exception $ex) {
             return false;
         }
     }
@@ -284,7 +290,7 @@ class AopClient
      * 
      * @return bool
      */
-    public function verifyV2($params)
+    public function verifyV2($params): bool
     {
         if (!$params || !isset($params['sign'])) {
             return false;
@@ -294,20 +300,21 @@ class AopClient
         $data = $this->getSignContent($params);
         try {
             return $this->rsaPubilcVerify($data, $sign, $this->signType);
-        } catch (\Exception $ex) {
+        } catch (Exception $ex) {
             return false;
         }
     }
 
-    /**
-     * 将参数数组签名（计算 Sign 值）.
-     *
-     * @param $params
-     * @param $signType
-     *
-     * @return string
-     */
-    protected function generateSign($params, $signType = 'RSA2')
+	/**
+	 * 将参数数组签名（计算 Sign 值）.
+	 *
+	 * @param array $params 参数数组
+	 * @param string $signType 签名类型
+	 *
+	 * @return string
+	 * @throws Exception
+	 */
+    protected function generateSign(array $params, string $signType = 'RSA2'): string
     {
         $data = $this->getSignContent($params);
 
@@ -317,11 +324,11 @@ class AopClient
     /**
      * 将数组转换为待签名数据.
      *
-     * @param array $params
+     * @param array $params 参数数组
      *
      * @return string
      */
-    protected function getSignContent($params)
+    protected function getSignContent(array $params): string
     {
         ksort($params);
         unset($params['sign']);
@@ -331,22 +338,21 @@ class AopClient
             if($v instanceof \CURLFile || $this->isEmpty($v) || substr($v, 0, 1) == '@') continue;
             $stringToBeSigned .= "&{$k}={$v}";
         }
-        $stringToBeSigned = substr($stringToBeSigned, 1);
-
-        return $stringToBeSigned;
+	    return substr($stringToBeSigned, 1);
     }
 
-    /**
-     * 使用应用私钥签名
-     *
-     * @param $data
-     * @param $signType
-     *
-     * @return string
-     *
-     * @see https://docs.open.alipay.com/291/106118
-     */
-    protected function rsaPrivateSign($data, $signType = 'RSA2')
+	/**
+	 * 使用应用私钥签名
+	 *
+	 * @param string $data 待签名数据
+	 * @param string $signType 签名类型
+	 *
+	 * @return string
+	 *
+	 * @throws Exception
+	 * @see https://docs.open.alipay.com/291/106118
+	 */
+    protected function rsaPrivateSign(string $data, string $signType = 'RSA2'): string
     {
         if ($this->isEmpty($this->rsaPrivateKeyFilePath)) {
             $priKey = "-----BEGIN RSA PRIVATE KEY-----\n" .
@@ -357,7 +363,7 @@ class AopClient
         }
         $res = openssl_get_privatekey($priKey);
         if(!$res){
-            throw new \Exception('签名失败，应用私钥不正确');
+            throw new Exception('签名失败，应用私钥不正确');
         }
 
         if($signType == 'RSA2'){
@@ -371,14 +377,16 @@ class AopClient
         return base64_encode($sign);
     }
 
-    /**
-     * 使用支付宝公钥验签
-     *
-     * @param $data
-     * 
-     * @return bool
-     */
-    protected function rsaPubilcVerify($data, $sign, $signType = 'RSA2')
+	/**
+	 * 使用支付宝公钥验签
+	 *
+	 * @param string $data 待验签数据
+	 * @param string $sign 签名
+	 * @param string $signType
+	 * @return bool
+	 * @throws Exception
+	 */
+    public function rsaPubilcVerify(string $data, string $sign, string $signType = 'RSA2'): bool
     {
         if ($this->isEmpty($this->rsaPublicKeyFilePath)) {
             $pubKey = "-----BEGIN PUBLIC KEY-----\n" .
@@ -389,7 +397,7 @@ class AopClient
         }
         $res = openssl_get_publickey($pubKey);
         if(!$res){
-            throw new \Exception('验签失败，支付宝公钥不正确');
+            throw new Exception('验签失败，支付宝公钥不正确');
         }
 
         if($signType == 'RSA2'){
@@ -410,20 +418,20 @@ class AopClient
      *
      * @return bool
      */
-    protected function isEmpty($value)
+    protected function isEmpty(?string $value): bool
     {
         return $value === null || trim($value) === '';
     }
 
-    /**
-     * 发起 GET/POST 请求.
-     *
-     * @param $url
-     * @param $params
-     *
-     * @return bool|string
-     */
-    protected function curl($url, $postFields = null)
+	/**
+	 * 发起 GET/POST 请求.
+	 *
+	 * @param string $url 请求地址
+	 * @param array|null $postFields POST 数据
+	 * @return bool|string
+	 * @throws Exception
+	 */
+    protected function curl(string $url, array $postFields = null)
     {
         $ch = curl_init();
 
@@ -459,13 +467,13 @@ class AopClient
         if (curl_errno($ch) > 0) {
             $errmsg = curl_error($ch);
             curl_close($ch);
-            throw new \Exception($errmsg, 0);
+            throw new Exception($errmsg, 0);
         }
 
         $httpStatusCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         if ($httpStatusCode != 200) {
             curl_close($ch);
-            throw new \Exception($response, $httpStatusCode);
+            throw new Exception($response, $httpStatusCode);
         }
 
         curl_close($ch);

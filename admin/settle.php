@@ -69,7 +69,7 @@ echo'</ul></div>';
       </div>
     </div>
   </div>
-<script src="<?php echo $cdnpublic?>layer/3.1.1/layer.min.js"></script>
+<script src="<?php echo $cdnpublic?>layer/3.1.1/layer.js"></script>
 <script>
 function createBatch(){
 	var confirmobj = layer.confirm('你确定要生成结算批次吗？', {
@@ -110,10 +110,10 @@ function transfer(batch){
 		success : function(data) {
 			if(data.code == 0){
 				var paymsg = '';
-				paymsg+='<a class="btn btn-default btn-block" href="transfer_batch.php?type=1&batch='+batch+'" style="margin-top:10px;"><img width="20" src="../assets/icon/alipay.ico" class="logo">支付宝批量转账</a>';
-				paymsg+='<a class="btn btn-default btn-block" href="transfer_batch.php?type=2&batch='+batch+'" style="margin-top:10px;"><img width="20" src="../assets/icon/wxpay.ico" class="logo">微信批量转账</a>';
-				paymsg+='<a class="btn btn-default btn-block" href="transfer_batch.php?type=3&batch='+batch+'" style="margin-top:10px;"><img width="20" src="../assets/icon/qqpay.ico" class="logo">QQ钱包批量转账</a>';
-				paymsg+='<a class="btn btn-default btn-block" href="transfer_batch.php?type=4&batch='+batch+'" style="margin-top:10px;"><img width="20" src="../assets/icon/bank.ico" class="logo">银行卡批量转账</a>';
+				paymsg+='<a class="btn btn-default btn-block" href="settle_batch.php?type=1&batch='+batch+'" style="margin-top:10px;"><img width="20" src="../assets/icon/alipay.ico" class="logo">支付宝批量转账</a>';
+				paymsg+='<a class="btn btn-default btn-block" href="settle_batch.php?type=2&batch='+batch+'" style="margin-top:10px;"><img width="20" src="../assets/icon/wxpay.ico" class="logo">微信批量转账</a>';
+				paymsg+='<a class="btn btn-default btn-block" href="settle_batch.php?type=3&batch='+batch+'" style="margin-top:10px;"><img width="20" src="../assets/icon/qqpay.ico" class="logo">QQ钱包批量转账</a>';
+				paymsg+='<a class="btn btn-default btn-block" href="settle_batch.php?type=4&batch='+batch+'" style="margin-top:10px;"><img width="20" src="../assets/icon/bank.ico" class="logo">银行卡批量转账</a>';
 				layer.alert('<center>'+paymsg+'<hr><a class="btn btn-default btn-block" onclick="layer.closeAll()">关闭</a></center>',{
 					btn:[],
 					title:'请选择批量转账方式',

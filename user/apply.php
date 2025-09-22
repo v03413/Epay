@@ -43,6 +43,10 @@ if($conf['settle_type']==1){
 }else{
 	$enable_money=$userrow['money'];
 }
+if($userrow['remain_money'] > 0 && !strpos($userrow['remain_money'], '%') && $enable_money > 0){
+	$enable_money = round($enable_money - $userrow['remain_money'], 2);
+	if($enable_money<0)$enable_money=0;
+}
 
 if(isset($_GET['act']) && $_GET['act']=='do'){
 	if($_POST['submit']=='申请提现'){
@@ -71,23 +75,37 @@ if(isset($_GET['act']) && $_GET['act']=='do'){
 			$fee=round($money*$conf['settle_rate']/100,2);
 			if(!empty($conf['settle_fee_min']) && $fee<$conf['settle_fee_min'])$fee=$conf['settle_fee_min'];
 			if(!empty($conf['settle_fee_max']) && $fee>$conf['settle_fee_max'])$fee=$conf['settle_fee_max'];
-			$realmoney=$money-$fee;
+			$realmoney=round($money-$fee, 2);
 		}else{
-			$realmoney=$money;
+			$realmoney=round($money, 2);
 		}
 		$data = ['uid'=>$uid, 'type'=>$userrow['settle_id'], 'account'=>$userrow['account'], 'username'=>$userrow['username'], 'money'=>$money, 'realmoney'=>$realmoney, 'addtime'=>'NOW()', 'status'=>0];
 		if($DB->insert('settle', $data)){
 			$settleid=$DB->lastInsertId();
 			changeUserMoney($uid, $money, false, '手动提现');
 			if($conf['settle_transfer']==1 && $conf['settle_transfermax']>0 && $money>$conf['settle_transfermax']) $conf['settle_transfer']=0;
-			if($conf['settle_transfer']==1){
+			$app = convert_type($userrow['settle_id']);
+			$channelid = $conf['transfer_'.$app];
+			if($conf['settle_transfer']==1 && $channelid > 0){
 				$out_biz_no = date("YmdHis").rand(11111,99999);
-				$app = convert_type($userrow['settle_id']);
-				$channel = \lib\Channel::get($conf['transfer_'.$app]);
+				$channel = \lib\Channel::get($channelid);
 				$result = \lib\Transfer::submit($app, $channel, $out_biz_no, $userrow['account'], $userrow['username'], $realmoney);
 				if($result['code']==0){
-					$DB->update('settle', ['status'=>1, 'endtime'=>'NOW()', 'transfer_status'=>1, 'transfer_result'=>$result["orderid"], 'transfer_date'=>$result["paydate"]], ['id'=>$settleid]);
-					exit("<script language='javascript'>alert('提现成功，资金已到账！');window.location.href='./settle.php';</script>");
+					$update = ['status'=>1, 'endtime'=>'NOW()', 'transfer_no'=>$out_biz_no, 'transfer_channel'=>$channelid, 'transfer_status'=>1, 'transfer_result'=>$result["orderid"], 'transfer_date'=>$result["paydate"]];
+					if(isset($result['wxpackage'])) $update['transfer_ext'] = $result['wxpackage'];
+					$DB->update('settle', $update, ['id'=>$settleid]);
+					if($result['status'] == 1){
+						$msg = '提现成功，资金已到账！';
+					}elseif(isset($result['wxpackage'])){
+						if(checkwechat()){
+							$jumpurl = $siteurl.'paypage/wxtrans.php?id='.$out_biz_no.'&type=transfer';
+							exit("<script language='javascript'>window.location.href='{$jumpurl}';</script>");
+						}
+						$msg = '提现成功！请在结算记录页面扫描二维码确认收款，1天内未确认，将退还给商家。';
+					}else{
+						$msg = '提现成功，资金稍后到账！';
+					}
+					exit("<script language='javascript'>alert('$msg');window.location.href='./settle.php';</script>");
 				}else{
 					$message='转账失败 '.$result['msg'];
 					$DB->update('settle', ['status'=>3, 'result'=>$result["msg"], 'transfer_status'=>2, 'transfer_result'=>$message], ['id'=>$settleid]);

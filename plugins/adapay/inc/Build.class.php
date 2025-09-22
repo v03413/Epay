@@ -116,6 +116,7 @@ class AdaPay
 		$req_url = self::$gateWayUrl . $endpoint;
 		if($method == 'GET'){
 			if($params){
+				ksort($params);
 				$headers = $this->get_headers($req_url , http_build_query($params) , self::$headerText);
 				$req_url .= '?' . http_build_query($params);
 			}else{
@@ -130,9 +131,12 @@ class AdaPay
 		if (!$response || !($result = json_decode($response , true))) {
 			throw new Exception('返回内容为空或解析失败');
 		}
+		if(!isset($result['data']) && isset($result['message'])){
+			throw new Exception($result['message']);
+		}
 		$data = json_decode($result['data'], true);
 
-		if ($data['status'] !== 'succeeded' && empty($data['expend'])) {
+		if ($data['status'] !== 'succeeded' && $data['status'] !== 'pending' && empty($data['expend'])) {
 			throw new Exception('['.$data['error_code'].']'.$data['error_msg']);
 		}
 		return $data;
@@ -159,7 +163,19 @@ class AdaPay
 		$public_params = [
 			'app_id' => self::$app_id,
 		];
-		$params = array_merge($params, $public_params);
+		$params = array_merge($public_params, $params);
+		return $this->request('POST', $endpoint, $params);
+	}
+
+	//通用请求
+	public function requestAdapay($params)
+	{
+		$adapayFuncCode = $params["adapay_func_code"];
+		$endpoint = '/v1/'.str_replace(".", "/",$adapayFuncCode);
+		$public_params = [
+			'app_id' => self::$app_id,
+		];
+		$params = array_merge($public_params, $params);
 		return $this->request('POST', $endpoint, $params);
 	}
 
@@ -242,6 +258,21 @@ class AdaPay
 		return $this->request('GET', $endpoint, $params);
 	}
 
+	//创建支付撤销对象
+	public function createPaymentReverse($params){
+		$endpoint = '/v1/payments/reverse';
+		return $this->request('POST', $endpoint, $params);
+	}
+
+	//查询支付确认对象
+	public function queryPaymentReverse($reverse_id){
+		$params = [
+			'reverse_id' => $reverse_id
+		];
+		$endpoint = '/v1/payments/reverse/'.$reverse_id;
+		return $this->request('GET', $endpoint, $params);
+	}
+
 	//创建取现对象
 	public function createDrawCash($params){
 		$endpoint = '/v1/cashs';
@@ -271,6 +302,37 @@ class AdaPay
 		if($settle_account_id){
 			$params['settle_account_id'] = $settle_account_id;
 		}
+		return $this->request('GET', $endpoint, $params);
+	}
+
+	//钱包登录
+	public function walletLogin($member_id, $ip){
+		$endpoint = '/v1/walletLogin';
+		$params = [
+			'app_id' => self::$app_id,
+			'member_id' => $member_id,
+			'ip' => $ip
+		];
+		return $this->request('GET', $endpoint, $params);
+	}
+
+	//账户转账
+	public function createTransfer($params){
+		$endpoint = '/v1/settle_accounts/transfer';
+		$public_params = [
+			'app_id' => self::$app_id,
+		];
+		$params = array_merge($params, $public_params);
+		return $this->request('POST', $endpoint, $params);
+	}
+
+	//账户转账查询
+	public function queryTransfer($params){
+		$endpoint = '/v1/settle_accounts/transfer/list';
+		$public_params = [
+			'app_id' => self::$app_id,
+		];
+		$params = array_merge($public_params, $params);
 		return $this->request('GET', $endpoint, $params);
 	}
 	

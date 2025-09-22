@@ -25,7 +25,7 @@ if (!defined('IN_PLUGIN'))
             </div>
             <div class="payment-content">
                 <div class="content-info">
-                    <h1>￥<?php echo $order['realmoney'] ?></h1>
+                    <h1>¥<?php echo $order['realmoney'] ?></h1>
                     <ul class="nk-activity">
                         <li class="nk-activity-item">
                             <span>商品名称：<?php echo $order['name'] ?></span>
@@ -46,7 +46,7 @@ if (!defined('IN_PLUGIN'))
             </div>
         </div>
         <script src="<?php echo $cdnpublic ?>jquery/1.12.4/jquery.min.js"></script>
-        <script src="<?php echo $cdnpublic ?>layer/3.1.1/layer.min.js"></script>
+        <script src="<?php echo $cdnpublic ?>layer/3.1.1/layer.js"></script>
         <script>
             var code_url = '<?php echo $code_url ?>';
             var url_scheme = 'mqqapi://forward/url?src_type=web&style=default&=1&version=1&url_prefix=' + window.btoa(code_url);
@@ -100,7 +100,7 @@ if (!defined('IN_PLUGIN'))
                 window.history.pushState('forward', null, '');
 
                 document.getElementById("openUrl").href = url_scheme;
-                if (navigator.userAgent.indexOf('EdgA/') == -1) {
+                if (navigator.userAgent.indexOf('EdgA/') == -1 && $(window).height() > $(window).width()) {
                     window.location.href = url_scheme;
                 }
                 setTimeout("loadmsg()", 3000);

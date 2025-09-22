@@ -21,15 +21,22 @@ case 'getcount':
 	$order_today_all = round($DB->getColumn("SELECT sum(money) FROM pre_order WHERE uid={$uid} AND status=1 AND date='$today'"),2);
 	$order_lastday_all = round($DB->getColumn("SELECT sum(money) FROM pre_order WHERE uid={$uid} AND status=1 AND date='$lastday'"),2);
 
+	$transfer_today_all = round($DB->getColumn("SELECT sum(money) FROM pre_transfer WHERE uid={$uid} AND status<>2 AND addtime>='$today'"),2);
+	$transfer_lastday_all = round($DB->getColumn("SELECT sum(money) FROM pre_transfer WHERE uid={$uid} AND status<>2 AND addtime>='$lastday' AND addtime<'$today'"),2);
+
 	$channels = [];
 	$types = \lib\Channel::getTypes($uid, $userrow['gid']);
 	foreach($types as $row){
 		$order_today = round($DB->getColumn("SELECT sum(money) FROM pre_order WHERE uid={$uid} AND status=1 AND date='$today' AND type={$row['id']}"),2);
 		$order_lastday = round($DB->getColumn("SELECT sum(money) FROM pre_order WHERE uid={$uid} AND status=1 AND date='$lastday' AND type={$row['id']}"),2);
-		$channels[] = ['name'=>$row['name'], 'showname'=>$row['showname'], 'rate'=>round(100-$row['rate'], 2), 'order_today'=>$order_today, 'order_lastday'=>$order_lastday];
+
+		$orderrow = $DB->getRow("SELECT COUNT(*) allnum,COUNT(IF(status>0, 1, NULL)) sucnum FROM pre_order WHERE uid={$uid} AND addtime>='$today' AND type={$row['id']}");
+		$success_rate = $orderrow && $orderrow['allnum'] > 0 ? round($orderrow['sucnum']/$orderrow['allnum']*100,2) : 100;
+
+		$channels[] = ['name'=>$row['name'], 'showname'=>$row['showname'], 'rate'=>round(100-$row['rate'], 2), 'order_today'=>$order_today, 'order_lastday'=>$order_lastday, 'success_rate'=>$success_rate];
 	}
 
-	$result=['code'=>0, 'orders'=>$orders, 'orders_today'=>$orders_today, 'settle_money'=>$settle_money, 'order_today_all'=>$order_today_all, 'order_lastday_all'=>$order_lastday_all, 'channels'=>$channels];
+	$result=['code'=>0, 'orders'=>$orders, 'orders_today'=>$orders_today, 'settle_money'=>$settle_money, 'order_today_all'=>$order_today_all, 'order_lastday_all'=>$order_lastday_all, 'transfer_today_all'=>$transfer_today_all, 'transfer_lastday_all'=>$transfer_lastday_all, 'channels'=>$channels];
 	exit(json_encode($result));
 break;
 case 'sendcode':
@@ -194,6 +201,9 @@ case 'edit_info':
 	$keylogin=intval($_POST['keylogin']);
 	$refund=intval($_POST['refund']);
 	$transfer=intval($_POST['transfer']);
+	$remain_money=trim($_POST['remain_money']);
+	$pay_maxmoney=trim($_POST['pay_maxmoney']);
+	$pay_minmoney=trim($_POST['pay_minmoney']);
 
 	if($qq==null || $url==null){
 		exit('{"code":-1,"msg":"请确保每项都不为空"}');
@@ -204,6 +214,7 @@ case 'edit_info':
 	if(strlen($url)<4 || strpos($url,'.')==false){
 		exit('{"code":-1,"msg":"请填写正确的网站域名！"}');
 	}
+	$data = ['qq'=>$qq, 'url'=>$url, 'keylogin'=>$keylogin, 'refund'=>$refund, 'transfer'=>$transfer, 'remain_money'=>$remain_money, 'pay_maxmoney'=>$pay_maxmoney, 'pay_minmoney'=>$pay_minmoney];
 	if($conf['verifytype']==1){
 		if($email!=$userrow['email']){
 			$row=$DB->getRow("select * from pre_user where email=:email limit 1", [':email'=>$email]);
@@ -214,10 +225,9 @@ case 'edit_info':
 				exit('{"code":-1,"msg":"邮箱格式不正确"}');
 			}
 		}
-		$sqs = $DB->update('user', ['email'=>$email, 'qq'=>$qq, 'url'=>$url, 'keylogin'=>$keylogin, 'refund'=>$refund, 'transfer'=>$transfer], ['uid'=>$uid]);
-	}else{
-		$sqs = $DB->update('user', ['qq'=>$qq, 'url'=>$url, 'keylogin'=>$keylogin, 'refund'=>$refund, 'transfer'=>$transfer], ['uid'=>$uid]);
+		$data['email'] = $email;
 	}
+	$sqs = $DB->update('user', $data, ['uid'=>$uid]);
 	if($sqs!==false){
 		exit('{"code":1,"msg":"succ"}');
 	}else{
@@ -227,6 +237,16 @@ break;
 case 'edit_keytype':
 	$keytype=intval($_POST['keytype']);
 	$sqs = $DB->update('user', ['keytype'=>$keytype], ['uid'=>$uid]);
+	if($sqs!==false){
+		exit('{"code":1,"msg":"succ"}');
+	}else{
+		exit('{"code":-1,"msg":"保存失败！'.$DB->error().'"}');
+	}
+break;
+case 'edit_voice':
+	$voice_devid=trim($_POST['voice_devid']);
+	$voice_order=intval($_POST['voice_order']);
+	$sqs = $DB->update('user', ['voice_devid'=>$voice_devid, 'voice_order'=>$voice_order], ['uid'=>$uid]);
 	if($sqs!==false){
 		exit('{"code":1,"msg":"succ"}');
 	}else{
@@ -260,7 +280,11 @@ case 'edit_msgconfig':
 		'settle' => intval($_POST['notice_settle']),
 		'login' => intval($_POST['notice_login']),
 		'complain' => intval($_POST['notice_complain']),
-		'order_money' => trim($_POST['notice_order_money'])
+		'mchrisk' => intval($_POST['notice_mchrisk']),
+		'order_money' => trim($_POST['notice_order_money']),
+		'balance' => intval($_POST['notice_balance']),
+		'balance_money' => trim($_POST['notice_balance_money']),
+		'msgrobot_url' => trim($_POST['notice_msgrobot_url']),
 	];
 
 	$sqs=$DB->update('user', ['msgconfig'=>serialize($msgconfig)], ['uid'=>$uid]);
@@ -371,9 +395,28 @@ break;
 case 'edit_codename':
 	$codename=htmlspecialchars(strip_tags(trim($_POST['codename'])));
 
+	$msg = '';
+	if(!empty($userrow['voice_devid'])){
+		$url = 'http://iot.solomo-info.com:9306/admin/common/msgpush';
+	        $param = [
+	            'agent_id' => $conf['voice_username'],
+	            'agent_secret' => $conf['voice_apikey'],
+	            'sbx_id' => $userrow['voice_devid'],
+	            'msg' => json_encode(['cmd'=>'setpara','user'=>$codename], JSON_UNESCAPED_UNICODE),
+	            'debug' => 0,
+	        ];
+	        $data = get_curl($url, json_encode($param), 0, 0, 0, 0, 0, ['Content-Type: application/json']);
+	        $result = json_decode($data, true);
+	        if(isset($result['result']) && $result['result'] == 'success'){
+				$msg = '设置音响名称成功';
+	        }else{
+				$msg = '设置音响名称失败，'.$result['msg'];
+	        }
+	}
+
 	$sqs=$DB->update('user', ['codename'=>$codename], ['uid'=>$uid]);
 	if($sqs!==false){
-		exit('{"code":1,"msg":"保存成功！"}');
+		exit('{"code":1,"msg":"保存成功！'.$msg.'"}');
 	}else{
 		exit('{"code":-1,"msg":"保存失败！'.$DB->error().'"}');
 	}
@@ -382,12 +425,13 @@ case 'certificate':
 	$certname=htmlspecialchars(strip_tags(trim($_POST['certname'])));
 	$certno=htmlspecialchars(strip_tags(trim($_POST['certno'])));
 	$certtype=intval($_POST['certtype']);
+	$certcardtype=intval($_POST['certcardtype']);
 	if(!$_POST['csrf_token'] || $_POST['csrf_token']!=$_SESSION['csrf_token'])exit('{"code":-1,"msg":"CSRF TOKEN ERROR"}');
 	if($userrow['cert']==1 &&($certtype==0 || $certtype==1 && $userrow['certtype']==1))exit('{"code":-1,"msg":"你已完成实名认证"}');
 	if($conf['cert_money']>0 && $userrow['money']<$conf['cert_money'])exit('{"code":-1,"msg":"账户余额不足'.$conf['cert_money'].'元，无法完成认证"}');
 	if(empty($certname) || empty($certno))exit('{"code":-1,"msg":"请确保各项不能为空"}');
 	if(strlen($certname)<3)exit('{"code":-1,"msg":"姓名填写错误"}');
-	if(!is_idcard($certno))exit('{"code":-1,"msg":"身份证号不正确"}');
+	if($certcardtype==0 && !is_idcard($certno))exit('{"code":-1,"msg":"身份证号不正确"}');
 	/*$row=$DB->getRow("SELECT uid,phone,email FROM pre_user WHERE certname=:certname AND certno=:certno AND cert=1 LIMIT 1", [':certno'=>$certno, ':certname'=>$certname]);
 	if($row){
 		exit('{"code":-2,"msg":"账号:'.($row['phone']?$row['phone']:$row['email']).'(商户ID:'.$row['uid'].')已经使用此身份认证，是否将该认证信息关联到当前商户？关联需要输入商户ID '.$row['uid'].' 的商户密钥","uid":"'.$row['uid'].'"}');
@@ -400,6 +444,15 @@ case 'certificate':
 		if($checkres['code']!=0)exit('{"code":-1,"msg":"'.$checkres['msg'].'"}');
 	}
 	if($conf['cert_open'] == 1){ //支付宝身份验证
+		switch($certcardtype){
+			case 0: $alipaycerttype = 'IDENTITY_CARD'; break;
+			case 1: $alipaycerttype = 'HOME_VISIT_PERMIT_HK_MC'; break;
+			case 2: $alipaycerttype = 'HOME_VISIT_PERMIT_TAIWAN'; break;
+			case 3: $alipaycerttype = 'RESIDENCE_PERMIT_HK_MC'; break;
+			case 4: $alipaycerttype = 'RESIDENCE_PERMIT_TAIWAN'; break;
+			case 5: $alipaycerttype = 'PERMANENT_RESIDENCE_FOREIGNER'; break;
+			default: exit('{"code":-1,"msg":"未知的证件类型"}'); break;
+		}
 		if(!$conf['cert_channel'])exit('{"code":-1,"msg":"未配置支付宝身份验证通道"}');
 		$channel = \lib\Channel::get($conf['cert_channel']);
 		if(!$channel)exit('{"code":-1,"msg":"当前实名认证通道信息不存在"}');
@@ -408,7 +461,7 @@ case 'certificate':
 		try{
 			$certify = new \Alipay\AlipayCertifyService($alipay_config);
 			$outer_order_no = date("YmdHis").rand(000,999).$uid;
-			$certifyResult = $certify->initialize($outer_order_no, $certname, $certno, 'IDENTITY_CARD', 'SMART_FACE');
+			$certifyResult = $certify->initialize($outer_order_no, $certname, $certno, $alipaycerttype, 'SMART_FACE');
 		}catch(Exception $e){
 			exit('{"code":-1,"msg":"支付宝接口返回异常'.$e->getMessage().'"}');
 		}
@@ -547,18 +600,26 @@ case 'order': //订单详情
 	if(!$row)
 		exit('{"code":-1,"msg":"当前订单不存在！"}');
 	$row['subchannelname'] = $row['subchannel'] > 0 ? $DB->findColumn('subchannel', 'name', ['id'=>$row['subchannel']]) : '';
+	if($row['status']==2){
+		$row['refundtime'] = $DB->findColumn('refundorder', 'addtime', ['trade_no'=>$trade_no], 'refund_no DESC');
+	}
 	$result=array("code"=>0,"msg"=>"succ","data"=>$row);
 	exit(json_encode($result));
 break;
+case 'subOrders':
+	$trade_no=trim($_GET['trade_no']);
+	$list = \lib\Payment::getSubOrders($trade_no);
+	exit(json_encode(['code'=>0, 'data'=>$list, 'settle'=>$DB->findColumn('order', 'settle', ['trade_no'=>$trade_no])]));
+break;
 case 'notify':
-	$trade_no=daddslashes(trim($_POST['trade_no']));
-	$row=$DB->getRow("select * from pre_order where trade_no='$trade_no' AND uid=$uid limit 1");
+	$trade_no=$_POST['trade_no'];
+	$row=$DB->getRow("select * from pre_order where trade_no=:trade_no AND uid=:uid limit 1", [':trade_no'=>$trade_no, ':uid'=>$uid]);
 	if(!$row)
 		exit('{"code":-1,"msg":"当前订单不存在！"}');
 	if($row['status']==0)exit('{"code":-1,"msg":"订单尚未支付，无法重新通知！"}');
 	$url=creat_callback($row);
 	if($row['notify']>0)
-		$DB->exec("update pre_order set notify=0 where trade_no='$trade_no'");
+		$DB->exec("update pre_order set notify=0 where trade_no=:trade_no", [':trade_no'=>$trade_no]);
 	exit('{"code":0,"url":"'.($_POST['isreturn']==1?$url['return']:$url['notify']).'"}');
 break;
 case 'settle_result':
@@ -582,7 +643,8 @@ case 'recharge':
 	$trade_no=date("YmdHis").rand(11111,99999);
 	$return_url=$siteurl.'user/recharge.php?ok=1&trade_no='.$trade_no;
 	$domain=getdomain($return_url);
-	if(!$DB->exec("INSERT INTO `pre_order` (`trade_no`,`out_trade_no`,`uid`,`tid`,`addtime`,`name`,`money`,`notify_url`,`return_url`,`domain`,`ip`,`status`) VALUES (:trade_no, :out_trade_no, :uid, 2, NOW(), :name, :money, :notify_url, :return_url, :domain, :clientip, 0)", [':trade_no'=>$trade_no, ':out_trade_no'=>$trade_no, ':uid'=>$uid, ':name'=>$name, ':money'=>$money, ':notify_url'=>$return_url, ':return_url'=>$return_url, ':domain'=>$domain, ':clientip'=>$clientip]))exit('{"code":-1,"msg":"创建订单失败，请返回重试！"}');
+	$param = json_encode(['uid'=>$uid]);
+	if(!$DB->exec("INSERT INTO `pre_order` (`trade_no`,`out_trade_no`,`uid`,`tid`,`addtime`,`name`,`money`,`notify_url`,`return_url`,`domain`,`ip`,`status`,`param`) VALUES (:trade_no, :out_trade_no, :uid, 2, NOW(), :name, :money, :notify_url, :return_url, :domain, :clientip, 0, :param)", [':trade_no'=>$trade_no, ':out_trade_no'=>$trade_no, ':uid'=>$conf['reg_pay_uid'], ':name'=>$name, ':money'=>$money, ':notify_url'=>$return_url, ':return_url'=>$return_url, ':domain'=>$domain, ':clientip'=>$clientip, ':param'=>$param]))exit('{"code":-1,"msg":"创建订单失败，请返回重试！"}');
 	unset($_SESSION['csrf_token']);
 	$result = ['code'=>0, 'msg'=>'succ', 'url'=>'../submit2.php?typeid='.$typeid.'&trade_no='.$trade_no];
 	exit(json_encode($result));
@@ -623,6 +685,19 @@ case 'groupbuy':
 		if($money>$userrow['money'])exit('{"code":-1,"msg":"余额不足，请选择其他方式支付"}');
 		changeUserMoney($uid, $money, false, '购买会员');
 		changeUserGroup($uid, $gid, $endtime);
+
+		if($userrow['upid'] > 0){
+			$upgid = $DB->findColumn('user', 'gid', ['uid'=>$userrow['upid']]);
+			$groupconfig = getGroupConfig($upgid);
+			$conf_n = array_merge($conf, $groupconfig);
+			if($conf_n['invite_open'] == 1 && $conf_n['invite_groupbuy_rate'] > 0){
+				$invite_money = round($money * $conf_n['invite_groupbuy_rate'] / 100, 2);
+				if($invite_money > 0){
+					changeUserMoney($userrow['upid'], $invite_money, true, '邀请购买会员');
+				}
+			}
+		}
+
 		unset($_SESSION['csrf_token']);
 		$result = ['code'=>1, 'msg'=>'购买会员成功！'];
 		exit(json_encode($result));
@@ -631,8 +706,8 @@ case 'groupbuy':
 		$trade_no=date("YmdHis").rand(11111,99999);
 		$return_url=$siteurl.'user/groupbuy.php?ok=1&trade_no='.$trade_no;
 		$domain=getdomain($return_url);
-		$param = json_encode(['gid'=>$gid, 'endtime'=>$endtime]);
-		if(!$DB->exec("INSERT INTO `pre_order` (`trade_no`,`out_trade_no`,`uid`,`tid`,`addtime`,`name`,`money`,`notify_url`,`return_url`,`domain`,`ip`,`status`,`param`) VALUES (:trade_no, :out_trade_no, :uid, 4, NOW(), :name, :money, :notify_url, :return_url, :domain, :clientip, 0, :param)", [':trade_no'=>$trade_no, ':out_trade_no'=>$trade_no, ':uid'=>$uid, ':name'=>$name, ':money'=>$money, ':notify_url'=>$return_url, ':return_url'=>$return_url, ':domain'=>$domain, ':clientip'=>$clientip, ':param'=>$param]))exit('{"code":-1,"msg":"创建订单失败，请返回重试！"}');
+		$param = json_encode(['uid'=>$uid, 'gid'=>$gid, 'endtime'=>$endtime]);
+		if(!$DB->exec("INSERT INTO `pre_order` (`trade_no`,`out_trade_no`,`uid`,`tid`,`addtime`,`name`,`money`,`notify_url`,`return_url`,`domain`,`ip`,`status`,`param`) VALUES (:trade_no, :out_trade_no, :uid, 4, NOW(), :name, :money, :notify_url, :return_url, :domain, :clientip, 0, :param)", [':trade_no'=>$trade_no, ':out_trade_no'=>$trade_no, ':uid'=>$conf['reg_pay_uid'], ':name'=>$name, ':money'=>$money, ':notify_url'=>$return_url, ':return_url'=>$return_url, ':domain'=>$domain, ':clientip'=>$clientip, ':param'=>$param]))exit('{"code":-1,"msg":"创建订单失败，请返回重试！"}');
 		unset($_SESSION['csrf_token']);
 		$result = ['code'=>0, 'msg'=>'succ', 'url'=>'../submit2.php?typeid='.$typeid.'&trade_no='.$trade_no];
 		exit(json_encode($result));
@@ -666,7 +741,7 @@ case 'orderList':
 	}
 	unset($rs);
 
-	$sql=" uid=$uid";
+	$sql=" A.uid=$uid";
 	if(isset($_POST['paytype']) && !empty($_POST['paytype'])) {
 		$type = intval($_POST['paytype']);
 		$sql.=" AND A.`type`='$type'";
@@ -676,6 +751,9 @@ case 'orderList':
 	}elseif(isset($_POST['subchannel']) && !empty($_POST['subchannel'])) {
 		$subchannel = intval($_POST['subchannel']);
 		$sql.=" AND A.`subchannel`='$subchannel'";
+	}elseif(isset($_POST['applyid']) && !empty($_POST['applyid'])) {
+		$applyid = intval($_POST['applyid']);
+		$sql.=" AND A.`subchannel` IN (SELECT id FROM pre_subchannel WHERE apply_id='{$applyid}')";
 	}
 	if(isset($_POST['dstatus']) && $_POST['dstatus']>-1) {
 		$dstatus = intval($_POST['dstatus']);
@@ -709,12 +787,18 @@ case 'orderList':
 			$sql.=" AND A.`ip`='{$kw}'";
 		}elseif($_POST['type']==8){
 			$sql.=" AND A.`buyer`='{$kw}'";
+		}elseif($_POST['type']==9){
+			$sql.=" AND A.`api_trade_no`='{$kw}'";
+		}elseif($_POST['type']==10){
+			$sql.=" AND A.`bill_trade_no`='{$kw}'";
+		}elseif($_POST['type']==11){
+			$sql.=" AND A.`bill_mch_trade_no`='{$kw}'";
 		}
 	}
 	$offset = intval($_POST['offset']);
 	$limit = intval($_POST['limit']);
 	$total = $DB->getColumn("SELECT count(*) from pre_order A WHERE{$sql}");
-	$list = $DB->getAll("SELECT A.*,B.plugin FROM pre_order A LEFT JOIN pre_channel B ON A.channel=B.id WHERE{$sql} order by trade_no desc limit $offset,$limit");
+	$list = $DB->getAll("SELECT A.*,B.plugin,C.apply_id submchid FROM pre_order A LEFT JOIN pre_channel B ON A.channel=B.id LEFT JOIN pre_subchannel C ON A.subchannel=C.id WHERE{$sql} order by trade_no desc limit $offset,$limit");
 	$list2 = [];
 	foreach($list as $row){
 		$row['typename'] = $paytypes[$row['type']];
@@ -724,6 +808,91 @@ case 'orderList':
 
 	exit(json_encode(['total'=>$total, 'rows'=>$list2]));
 break;
+case 'statistics':
+    $sql=" A.uid=$uid";
+	if(isset($_POST['paytype']) && !empty($_POST['paytype'])) {
+		$type = intval($_POST['paytype']);
+		$sql.=" AND A.`type`='$type'";
+	}elseif(isset($_POST['channel']) && !empty($_POST['channel'])) {
+		$channel = intval($_POST['channel']);
+		$sql.=" AND A.`channel`='$channel'";
+	}elseif(isset($_POST['subchannel']) && !empty($_POST['subchannel'])) {
+		$subchannel = trim($_POST['subchannel']);
+		$subchannel = explode('|', $subchannel);
+		$subchannel = array_map('intval', $subchannel);
+		$sql.=" AND A.`subchannel` IN (".implode(",", $subchannel).")";
+	}
+	if(isset($_POST['dstatus']) && $_POST['dstatus']>-1) {
+		$dstatus = intval($_POST['dstatus']);
+		$sql.=" AND A.status='{$dstatus}'";
+	}
+	if(!empty($_POST['starttime']) || !empty($_POST['endtime'])){
+		if(!empty($_POST['starttime'])){
+			$starttime = daddslashes($_POST['starttime']);
+			$sql.=" AND A.addtime>='{$starttime} 00:00:00'";
+		}
+		if(!empty($_POST['endtime'])){
+			$endtime = daddslashes($_POST['endtime']);
+			$sql.=" AND A.addtime<='{$endtime} 23:59:59'";
+		}
+	}
+	if(isset($_POST['kw']) && !empty($_POST['kw'])) {
+		$kw=daddslashes($_POST['kw']);
+		if($_POST['type']==1){
+			$sql.=" AND A.`trade_no`='{$kw}'";
+		}elseif($_POST['type']==2){
+			$sql.=" AND A.`out_trade_no`='{$kw}'";
+		}elseif($_POST['type']==3){
+			$sql.=" AND A.`name` like '%{$kw}%'";
+		}elseif($_POST['type']==4){
+			$sql.=" AND A.`money`='{$kw}'";
+		}elseif($_POST['type']==5){
+			$sql.=" AND A.`realmoney`='{$kw}'";
+		}elseif($_POST['type']==6){
+			$sql.=" AND A.`domain`='{$kw}'";
+		}elseif($_POST['type']==7){
+			$sql.=" AND A.`ip`='{$kw}'";
+		}elseif($_POST['type']==8){
+			$sql.=" AND A.`buyer`='{$kw}'";
+		}elseif($_POST['type']==9){
+			$sql.=" AND A.`api_trade_no`='{$kw}'";
+		}elseif($_POST['type']==10){
+			$sql.=" AND A.`bill_trade_no`='{$kw}'";
+		}
+	}
+    // 统计数据
+    $resultMoneyData = $DB->getRow("SELECT 
+    SUM(money) AS totalMoney,
+    SUM(CASE WHEN A.status = 1 THEN money ELSE 0 END) AS successMoney,
+    SUM(CASE WHEN A.status = 0 THEN money ELSE 0 END) AS unpaidMoney,
+    SUM(CASE WHEN A.status = 2 THEN refundmoney ELSE 0 END) AS refundMoney
+    FROM pre_order A LEFT JOIN pre_channel B ON A.channel=B.id WHERE {$sql} order by trade_no desc");
+
+    $resultCount = $DB->getRow("SELECT 
+    COUNT(*) AS totalCount,
+    SUM(CASE WHEN A.status = 1 THEN 1 ELSE 0 END) AS successCount,
+    SUM(CASE WHEN A.status = 0 THEN 1 ELSE 0 END) AS unpaidCount,
+    SUM(CASE WHEN A.status = 2 THEN 1 ELSE 0 END) AS refundCount
+    FROM pre_order A LEFT JOIN pre_channel B ON A.channel=B.id WHERE {$sql} order by trade_no desc");
+
+    // 获取平台总收入利润
+    $platformProfit = $DB->getColumn("SELECT SUM(A.profitmoney) FROM pre_order A LEFT JOIN pre_channel B ON A.channel=B.id WHERE {$sql} AND status = 1 order by trade_no desc");
+
+	$result = [
+        'totalMoney' => number_format($resultMoneyData['totalMoney'], 2, '.', '') ?? 0.00,
+        'successMoney' => number_format($resultMoneyData['successMoney'], 2, '.', '') ?? 0.00,
+        'unpaidMoney' => number_format($resultMoneyData['unpaidMoney'], 2, '.', '') ?? 0.00,
+        'refundMoney' => number_format($resultMoneyData['refundMoney'], 2, '.', '') ?? 0.00,
+        'totalCount' => $resultCount['totalCount'] ?? '0',
+        'successCount' => $resultCount['successCount'] ?? '0',
+        'unpaidCount' => $resultCount['unpaidCount'] ?? '0',
+        'refundCount' => $resultCount['refundCount'] ?? '0',
+        'platformProfit' => number_format($platformProfit, 2, '.', '') ?? 0.00
+    ];
+	$result['successRate'] = $result['totalCount'] > 0 ? round(($result['totalCount']-$result['unpaidCount']) / $result['totalCount'] * 100, 2) : 0;
+	exit(json_encode(['code'=>0, 'data'=>$result]));
+break;
+
 case 'recordList':
 	$sql=" uid=$uid";
 	if(isset($_POST['kw']) && !empty($_POST['kw'])) {
@@ -753,34 +922,127 @@ case 'settleList':
 	$limit = intval($_POST['limit']);
 	$total = $DB->getColumn("SELECT count(*) from pre_settle WHERE{$sql}");
 	$list = $DB->getAll("SELECT * FROM pre_settle WHERE{$sql} order by id desc limit $offset,$limit");
+	$list2 = [];
+	foreach($list as $row){
+		if($row['type'] == 2 && $row['status'] == 1 && !empty($row['transfer_ext']) && time() - strtotime($row['transfer_date']) <= 86400){
+			if(substr($row['ext'], 0, 4) == 'http'){
+				$row['jumpurl'] = $row['ext'];
+			}else{
+				$row['jumpurl'] = $siteurl.'paypage/wxtrans.php?id='.$row['id'].'&type=settle';
+			}
+		}
+		$list2[] = $row;
+	}
 
-	exit(json_encode(['total'=>$total, 'rows'=>$list]));
+	exit(json_encode(['total'=>$total, 'rows'=>$list2]));
 break;
 case 'transferList':
 	$sql=" uid=$uid";
-	if(isset($_POST['type']) && !empty($_POST['type'])) {
-		$type = intval($_POST['type']);
+	if(isset($_POST['paytype']) && !empty($_POST['paytype'])) {
+		$type = intval($_POST['paytype']);
 		$sql.=" AND `type`='$type'";
 	}
 	if(isset($_POST['dstatus']) && $_POST['dstatus']>-1) {
 		$dstatus = intval($_POST['dstatus']);
 		$sql.=" AND `status`='{$dstatus}'";
 	}
-	if(isset($_POST['value']) && !empty($_POST['value'])) {
-		$value = daddslashes($_POST['value']);
-		$sql.=" AND (`biz_no`='{$value}' OR `account` like '%{$value}%' OR `username` like '%{$value}%')";
+	if(isset($_POST['kw']) && !empty($_POST['kw'])) {
+		$kw=daddslashes($_POST['kw']);
+		if($_POST['type']==1){
+			$sql.=" AND `biz_no`='{$kw}'";
+		}elseif($_POST['type']==2){
+			$sql.=" AND `out_biz_no`='{$kw}'";
+		}elseif($_POST['type']==3){
+			$sql.=" AND `pay_order_no`='{$kw}'";
+		}elseif($_POST['type']==4){
+			$sql.=" AND `account`='{$kw}'";
+		}elseif($_POST['type']==5){
+			$sql.=" AND `username`='{$kw}'";
+		}elseif($_POST['type']==6){
+			$sql.=" AND `money`='{$kw}'";
+		}
+	}
+	if(!empty($_POST['starttime']) || !empty($_POST['endtime'])){
+		if(!empty($_POST['starttime'])){
+			$starttime = daddslashes($_POST['starttime']);
+			$sql.=" AND addtime>='{$starttime} 00:00:00'";
+		}
+		if(!empty($_POST['endtime'])){
+			$endtime = daddslashes($_POST['endtime']);
+			$sql.=" AND addtime<='{$endtime} 23:59:59'";
+		}
 	}
 	$offset = intval($_POST['offset']);
 	$limit = intval($_POST['limit']);
 	$total = $DB->getColumn("SELECT count(*) from pre_transfer WHERE{$sql}");
 	$list = $DB->getAll("SELECT * FROM pre_transfer WHERE{$sql} order by biz_no desc limit $offset,$limit");
+	$list2 = [];
+	foreach($list as $row){
+		if($row['type'] == 'wxpay' && $row['status'] == 0 && !empty($row['ext'])){
+			if(substr($row['ext'], 0, 4) == 'http'){
+				$row['jumpurl'] = $row['ext'];
+			}else{
+				$row['jumpurl'] = $siteurl.'paypage/wxtrans.php?id='.$row['biz_no'].'&type=transfer';
+			}
+		}
+		if($row['status'] == 4){
+			$row['jumpurl'] = \lib\Transfer::red_url($row['biz_no']);
+		}
+		$list2[] = $row;
+	}
 
-	exit(json_encode(['total'=>$total, 'rows'=>$list]));
+	exit(json_encode(['total'=>$total, 'rows'=>$list2]));
+break;
+case 'transfer_statistics':
+	$sql=" uid=$uid";
+	if(isset($_POST['paytype']) && !empty($_POST['paytype'])) {
+		$type = intval($_POST['paytype']);
+		$sql.=" AND `type`='$type'";
+	}
+	if(isset($_POST['dstatus']) && $_POST['dstatus']>-1) {
+		$dstatus = intval($_POST['dstatus']);
+		$sql.=" AND `status`={$dstatus}";
+	}
+	if(!empty($_POST['starttime']) || !empty($_POST['endtime'])){
+		if(!empty($_POST['starttime'])){
+			$starttime = daddslashes($_POST['starttime']);
+			$sql.=" AND addtime>='{$starttime} 00:00:00'";
+		}
+		if(!empty($_POST['endtime'])){
+			$endtime = daddslashes($_POST['endtime']);
+			$sql.=" AND addtime<='{$endtime} 23:59:59'";
+		}
+	}
+	if(isset($_POST['kw']) && !empty($_POST['kw'])) {
+		$kw=daddslashes($_POST['kw']);
+		if($_POST['type']==1){
+			$sql.=" AND `biz_no`='{$kw}'";
+		}elseif($_POST['type']==2){
+			$sql.=" AND `out_biz_no`='{$kw}'";
+		}elseif($_POST['type']==3){
+			$sql.=" AND `pay_order_no`='{$kw}'";
+		}elseif($_POST['type']==4){
+			$sql.=" AND `account`='{$kw}'";
+		}elseif($_POST['type']==5){
+			$sql.=" AND `username`='{$kw}'";
+		}elseif($_POST['type']==6){
+			$sql.=" AND `money`='{$kw}'";
+		}
+	}
+	$totalMoney = $DB->getColumn("SELECT SUM(money) FROM pre_transfer WHERE{$sql} AND status<>2");
+	$resultCount = $DB->getRow("SELECT 
+    COUNT(*) AS totalCount,
+    COUNT(status = 0 OR NULL) AS status0count,
+    COUNT(status = 1 OR NULL) AS status1count,
+    COUNT(status = 2 OR NULL) AS status2count,
+    COUNT(status = 3 OR NULL) AS status3count
+    FROM pre_transfer WHERE{$sql}");
+	exit(json_encode(['code'=>0, 'data'=>['totalMoney'=>number_format($totalMoney, 2, '.', '') ?? 0.00, 'totalCount'=>$resultCount['totalCount'], 'status0count'=>$resultCount['status0count'], 'status1count'=>$resultCount['status1count'], 'status2count'=>$resultCount['status2count'], 'status3count'=>$resultCount['status3count']]]));
 break;
 
 case 'transfer_result':
 	$biz_no=trim($_GET['biz_no']);
-	$row=$DB->getRow("select result from pre_transfer where biz_no='$biz_no' limit 1");
+	$row=$DB->find('transfer', 'result', ['biz_no'=>$biz_no, 'uid'=>$uid]);
 	if(!$row)
 		exit('{"code":-1,"msg":"当前付款记录不存在！"}');
 	$result = ['code'=>0,'msg'=>$row['result']?$row['result']:'未知'];
@@ -813,7 +1075,7 @@ case 'refund_submit': //确认退款
 	$refund_no = date("YmdHis").rand(11111,99999);
 	$result = \lib\Order::refund($refund_no, $trade_no, $money, 1, $uid);
 	if($result['code'] == 0){
-		$result['msg'] = '退款成功！退款金额￥'.$result['money'];
+		$result['msg'] = '退款成功！退款金额¥'.$result['money'];
 	}
 	exit(json_encode($result));
 break;
@@ -839,6 +1101,54 @@ case 'inviteList':
 	$list = $DB->getAll("SELECT uid,upid,addtime,lasttime,status FROM pre_user WHERE{$sql} order by uid desc limit $offset,$limit");
 
 	exit(json_encode(['total'=>$total, 'rows'=>$list]));
+break;
+
+case 'deposit_recharge':
+	$money=trim(daddslashes($_POST['money']));
+	$typeid=intval($_POST['typeid']);
+	if($money<=0 || !is_numeric($money) || !preg_match('/^[0-9.]+$/', $money))exit('{"code":-1,"msg":"金额不合法"}');
+	if(!$_POST['csrf_token'] || $_POST['csrf_token']!=$_SESSION['csrf_token'])exit('{"code":-1,"msg":"CSRF TOKEN ERROR"}');
+	if($typeid==0){
+		if($money>$userrow['money'])exit('{"code":-1,"msg":"余额不足，请选择其他方式支付"}');
+		changeUserMoney($uid, $money, false, '充值保证金');
+		$deposit = $userrow['deposit'] > 0 ? round($userrow['deposit'] + $money, 2) : $money;
+		$DB->exec("UPDATE pre_user SET deposit=:deposit WHERE uid=:uid", [':deposit'=>$deposit, ':uid'=>$uid]);
+		unset($_SESSION['csrf_token']);
+		$result = ['code'=>1, 'msg'=>'成功充值'.$money.'元保证金！'];
+		exit(json_encode($result));
+	}else{
+		$name = '充值保证金 UID:'.$uid;
+		if($userrow['pay']==0)exit('{"code":-1,"msg":"当前商户已被封禁"}');
+		if($conf['pay_maxmoney']>0 && $money>$conf['pay_maxmoney'])exit('{"code":-1,"msg":"最大支付金额是'.$conf['pay_maxmoney'].'元"}');
+		if($conf['pay_minmoney']>0 && $money<$conf['pay_minmoney'])exit('{"code":-1,"msg":"最小支付金额是'.$conf['pay_minmoney'].'元"}');
+		$trade_no=date("YmdHis").rand(11111,99999);
+		$return_url=$siteurl.'user/deposit.php?ok=1&trade_no='.$trade_no;
+		$domain=getdomain($return_url);
+		$param = json_encode(['uid'=>$uid]);
+		if(!$DB->exec("INSERT INTO `pre_order` (`trade_no`,`out_trade_no`,`uid`,`tid`,`addtime`,`name`,`money`,`notify_url`,`return_url`,`domain`,`ip`,`status`,`param`) VALUES (:trade_no, :out_trade_no, :uid, 5, NOW(), :name, :money, :notify_url, :return_url, :domain, :clientip, 0, :param)", [':trade_no'=>$trade_no, ':out_trade_no'=>$trade_no, ':uid'=>$conf['reg_pay_uid'], ':name'=>$name, ':money'=>$money, ':notify_url'=>$return_url, ':return_url'=>$return_url, ':domain'=>$domain, ':clientip'=>$clientip, ':param'=>$param]))exit('{"code":-1,"msg":"创建订单失败，请返回重试！"}');
+		unset($_SESSION['csrf_token']);
+		$result = ['code'=>0, 'msg'=>'succ', 'url'=>'../submit2.php?typeid='.$typeid.'&trade_no='.$trade_no];
+		exit(json_encode($result));
+	}
+break;
+case 'deposit_withdraw':
+	$money=trim(daddslashes($_POST['money']));
+	if($money<=0 || !is_numeric($money) || !preg_match('/^[0-9.]+$/', $money))exit('{"code":-1,"msg":"金额不合法"}');
+	if(!$_POST['csrf_token'] || $_POST['csrf_token']!=$_SESSION['csrf_token'])exit('{"code":-1,"msg":"CSRF TOKEN ERROR"}');
+	if($money>$userrow['deposit'])exit('{"code":-1,"msg":"保证金不足"}');
+	if($conf['user_deposit_day']>0){
+		$days = intval($conf['user_deposit_day']);
+		$orders = $DB->getColumn("SELECT count(*) FROM pre_order WHERE uid='{$uid}' AND status=1 AND addtime>DATE_SUB(NOW(),INTERVAL {$days} DAY)");
+		if($orders>0)exit('{"code":-1,"msg":"你在最近'.$days.'天内有订单，无法提取保证金"}');
+		$complains = $DB->getColumn("SELECT count(*) FROM pre_complain WHERE uid='{$uid}' AND addtime>DATE_SUB(NOW(),INTERVAL {$days} DAY)");
+		if($complains>0)exit('{"code":-1,"msg":"你在最近'.$days.'天内有投诉记录，无法提取保证金"}');
+	}
+	$deposit = round($userrow['deposit'] - $money, 2);
+	$DB->exec("UPDATE pre_user SET deposit=:deposit WHERE uid=:uid", [':deposit'=>$deposit, ':uid'=>$uid]);
+	changeUserMoney($uid, $money, true, '提取保证金');
+	unset($_SESSION['csrf_token']);
+	$result = ['code'=>0, 'msg'=>'成功提取'.$money.'元保证金！'];
+	exit(json_encode($result));
 break;
 
 default:

@@ -23,9 +23,8 @@ $_SESSION['csrf_token'] = $csrf_token;
 <title>登录 | <?php echo $conf['sitename']?></title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
 <link rel="stylesheet" href="<?php echo $cdnpublic?>twitter-bootstrap/3.4.1/css/bootstrap.min.css" type="text/css" />
-<link rel="stylesheet" href="<?php echo $cdnpublic?>animate.css/3.5.2/animate.min.css" type="text/css" />
+<link rel="stylesheet" href="<?php echo $cdnpublic?>animate.css/3.7.2/animate.min.css" type="text/css" />
 <link rel="stylesheet" href="<?php echo $cdnpublic?>font-awesome/4.7.0/css/font-awesome.min.css" type="text/css" />
-<link rel="stylesheet" href="<?php echo $cdnpublic?>simple-line-icons/2.4.1/css/simple-line-icons.min.css" type="text/css" />
 <link rel="stylesheet" href="./assets/css/font.css" type="text/css" />
 <link rel="stylesheet" href="./assets/css/app.css" type="text/css" />
 <link rel="stylesheet" href="./assets/css/captcha.css" type="text/css" />
@@ -119,9 +118,21 @@ $_SESSION['csrf_token'] = $csrf_token;
 </div>
 <script src="<?php echo $cdnpublic?>jquery/3.4.1/jquery.min.js"></script>
 <script src="<?php echo $cdnpublic?>twitter-bootstrap/3.4.1/js/bootstrap.min.js"></script>
-<script src="<?php echo $cdnpublic?>layer/3.1.1/layer.min.js"></script>
+<script src="<?php echo $cdnpublic?>layer/3.1.1/layer.js"></script>
+<script src="<?php echo $cdnpublic?>jsencrypt/3.5.4/jsencrypt.min.js"></script>
 <script src="//static.geetest.com/static/tools/gt.js"></script>
 <script>
+window.appendChildOrg = Element.prototype.appendChild;
+Element.prototype.appendChild = function() {
+    if(arguments[0].tagName == 'SCRIPT'){
+        arguments[0].setAttribute('referrerpolicy', 'no-referrer');
+    }
+    return window.appendChildOrg.apply(this, arguments);
+};
+</script>
+<script src="//static.geetest.com/v4/gt4.js"></script>
+<script>
+const PUBLIC_KEY_PEM = `<?php echo base64ToPem($conf['public_key'], 'PUBLIC KEY')?>`;
 var captcha_open = 0;
 var handlerEmbed = function (captchaObj) {
 	captchaObj.appendTo('#captcha');
@@ -132,7 +143,7 @@ var handlerEmbed = function (captchaObj) {
 		if (!result) {
 			return alert('请完成验证');
 		}
-		$("#captchaform").html('<input type="hidden" name="geetest_challenge" value="'+result.geetest_challenge+'" /><input type="hidden" name="geetest_validate" value="'+result.geetest_validate+'" /><input type="hidden" name="geetest_seccode" value="'+result.geetest_seccode+'" />');
+		$.captchaResult = result;
 		$.captchaObj = captchaObj;
 	});
 };
@@ -147,41 +158,53 @@ $(document).ready(function(){
 	});
 	if(captcha_open==1){
 	$.ajax({
-		url: "./ajax.php?act=captcha&t=" + (new Date()).getTime(),
+		url: "ajax.php?act=captcha",
 		type: "get",
+		cache: false,
 		dataType: "json",
 		success: function (data) {
 			$('#captcha_text').hide();
 			$('#captcha_wait').show();
-			initGeetest({
-				gt: data.gt,
-				challenge: data.challenge,
-				new_captcha: data.new_captcha,
-				product: "popup",
-				width: "100%",
-				offline: !data.success
-			}, handlerEmbed);
+			if(data.version == 1){
+				initGeetest4({
+					captchaId: data.gt,
+					product: 'popup',
+					protocol: 'https://',
+					riskType: 'slide',
+					hideSuccess: true,
+					nativeButton: {width: '100%'}
+				}, handlerEmbed);
+			}else{
+				initGeetest({
+					gt: data.gt,
+					challenge: data.challenge,
+					new_captcha: data.new_captcha,
+					product: "popup",
+					width: "100%",
+					offline: !data.success,
+				}, handlerEmbed);
+			}
 		}
 	});
 	}
 });
 function submitLogin(type,user,pass){
 	var csrf_token=$("input[name='csrf_token']").val();
-	var data = {type:type, user:user, pass:pass, csrf_token:csrf_token};
-	if(captcha_open == 1){
-		var geetest_challenge = $("input[name='geetest_challenge']").val();
-		var geetest_validate = $("input[name='geetest_validate']").val();
-		var geetest_seccode = $("input[name='geetest_seccode']").val();
-		if(geetest_challenge == ""){
-			layer.alert('请先完成滑动验证！'); return false;
-		}
-		var adddata = {geetest_challenge:geetest_challenge, geetest_validate:geetest_validate, geetest_seccode:geetest_seccode};
+	if(captcha_open == 1 && !$.captchaResult){
+		layer.alert('请先完成滑动验证！'); return false;
+	}
+	var enc_type = '0';
+	if(PUBLIC_KEY_PEM != ''){
+		const enc = new JSEncrypt();
+		enc.setPublicKey(PUBLIC_KEY_PEM);
+		pass = enc.encrypt(pass);
+		if(pass) enc_type = '1';
 	}
 	var ii = layer.load();
 	$.ajax({
 		type: "POST",
 		dataType: "json",
-		data: Object.assign(data, adddata),
+		data: {type:type, user:user, pass:pass, enc:enc_type, csrf_token:csrf_token, ...$.captchaResult},
 		url: "ajax.php?act=login",
 		success: function (data, textStatus) {
 			layer.close(ii);

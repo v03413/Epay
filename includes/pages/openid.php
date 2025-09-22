@@ -45,7 +45,7 @@ if(!defined('IN_CRONLITE'))exit();
 </div>
 </div>
 <script src="<?php echo $cdnpublic?>jquery/1.12.4/jquery.min.js"></script>
-<script src="<?php echo $cdnpublic?>layer/3.1.1/layer.min.js"></script>
+<script src="<?php echo $cdnpublic?>layer/3.1.1/layer.js"></script>
 <script src="<?php echo $cdnpublic?>clipboard.js/1.7.1/clipboard.min.js"></script>
 <script>
 document.body.addEventListener('touchmove', function (event) {

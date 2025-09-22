@@ -2,8 +2,8 @@
 //error_reporting(0);
 error_reporting(E_ERROR | E_PARSE | E_COMPILE_ERROR);
 if(defined('IN_CRONLITE'))return;
-define('VERSION', '3075');
-define('DB_VERSION', '2038');
+define('VERSION', '3095');
+define('DB_VERSION', '2052');
 define('IN_CRONLITE', true);
 define('SYSTEM_ROOT', dirname(__FILE__).'/');
 define('ROOT', dirname(SYSTEM_ROOT).'/');
@@ -35,10 +35,6 @@ if(!function_exists("is_https")){
 }
 
 $siteurl = (is_https() ? 'https://' : 'http://').$_SERVER['HTTP_HOST'].'/';
-
-if(is_file(SYSTEM_ROOT.'360safe/360webscan.php')){//360网站卫士
-//    require_once(SYSTEM_ROOT.'360safe/360webscan.php');
-}
 
 include_once(SYSTEM_ROOT."autoloader.php");
 Autoloader::register();
@@ -95,18 +91,20 @@ if($conf['cdnpublic']==1){
 }elseif($conf['cdnpublic']==2){
 	$cdnpublic = 'https://s4.zstatic.net/ajax/libs/';
 }elseif($conf['cdnpublic']==4){
-	$cdnpublic = '//lf26-cdn-tos.bytecdntp.com/cdn/expire-1-M/';
+	$cdnpublic = 'https://cdnjs.snrat.com/ajax/libs/';
 }else{
-	$cdnpublic = '//mirrors.sustech.edu.cn/cdnjs/ajax/libs/';
+	$cdnpublic = '/assets/vendor/';
 }
 
 if(empty($conf['public_key'])){
 	$key_pair = generate_key_pair();
-	$conf['public_key'] = $key_pair['public_key'];
-	$conf['private_key'] = $key_pair['private_key'];
-	saveSetting('public_key', $conf['public_key']);
-	saveSetting('private_key', $conf['private_key']);
-	$CACHE->clear();
-	unset($key_pair);
+	if($key_pair){
+		$conf['public_key'] = $key_pair['public_key'];
+		$conf['private_key'] = $key_pair['private_key'];
+		saveSetting('public_key', $conf['public_key']);
+		saveSetting('private_key', $conf['private_key']);
+		$CACHE->clear();
+		unset($key_pair);
+	}
 }
 ?>

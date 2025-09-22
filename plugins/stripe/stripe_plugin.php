@@ -24,6 +24,43 @@ class stripe_plugin
 				'type' => 'select',
 				'options' => [0=>'跳转收银台',1=>'直接支付(仅限支付宝/微信)'],
 			],
+			'currency_code' => [
+				'name' => '结算货币',
+				'type' => 'select',
+				'options' => [
+					'CNY' => '人民币 (CNY)',
+					'HKD' => '港币 (HKD)',
+					'EUR' => '欧元 (EUR)',
+					'USD' => '美元 (USD)',
+					'AUD' => '澳元 (AUD)',
+					'CAD' => '加拿大元 (CAD)',
+					'GBP' => '英镑 (GBP)',
+					'BRL' => '巴西雷亚尔 (BRL)',
+					'CZK' => '克朗 (CZK)',
+					'DKK' => '丹麦克朗(DKK)',
+					'HUF' => '匈牙利福林 (HUF)',
+					'INR' => '印度卢比 (INR)',
+					'ILS' => '以色列新谢克尔 (ILS)',
+					'JPY' => '日元 (JPY)',
+					'MYR' => '马来西亚林吉特 (MYR)',
+					'MXN' => '墨西哥比索 (MXN)',
+					'TWD' => '新台币 (TWD)',
+					'NZD' => '新西兰元 (NZD)',
+					'NOK' => '挪威克朗 (NOK)',
+					'PHP' => '菲律宾比索 (PHP)',
+					'PLN' => '波兰兹罗提 (PLN)',
+					'RUB' => '俄罗斯卢布 (RUB)',
+					'SGD' => '新加坡元 (SGD)',
+					'SEK' => '瑞典克朗 (SEK)',
+					'CHF' => '瑞士法郎 (CHF)',
+					'THB' => '泰铢 (THB)',
+				],
+			],
+			'currency_rate' => [
+				'name' => '货币汇率',
+				'type' => 'input',
+				'note' => '例如1元人民币兑换0.137美元(USD)，则此处填0.137',
+			],
 		],
 		'select' => null,
 		'note' => '需设置WebHook地址：[siteurl]pay/webhook/[channel]/ <br/>侦听的事件，直接支付用: payment_intent.succeeded，跳转收银台用：checkout.session.completed、checkout.session.async_payment_succeeded', //支付密钥填写说明
@@ -52,17 +89,19 @@ class stripe_plugin
 			$payment_method='';
 		}
 
+		if(!$channel['currency_rate']) $channel['currency_rate'] = 1;
+		if(!$channel['currency_code']) $channel['currency_code'] = 'cny';
+		$amount = intval(round($order['realmoney'] * $channel['currency_rate'] * 100));
+
 		try{
 			$stripe = new Stripe\StripeClient($channel['appid']);
-			//$price = currency_convert('CNY', 'HKD', $order['realmoney']);
-			$amount = intval(round($order['realmoney'] * 100));
 			$data = [
 				'success_url'         => $siteurl.'pay/return/'.TRADE_NO.'/',
 				'cancel_url'          => $siteurl.'pay/error/'.TRADE_NO.'/',
 				'client_reference_id' => TRADE_NO,
 				'line_items' => [[
 					'price_data' => [
-						'currency'     => 'CNY',
+						'currency'     => strtolower($channel['currency_code']),
 						'product_data' => [
 							'name' => $ordername
 						],
@@ -99,11 +138,13 @@ class stripe_plugin
 			throw new Exception('创建支付方式失败:'.$e->getMessage());
 		}
 
-		//$price = currency_convert('CNY', 'HKD', $order['realmoney']);
-		$amount = intval(round($order['realmoney'] * 100));
+		if(!$channel['currency_rate']) $channel['currency_rate'] = 1;
+		if(!$channel['currency_code']) $channel['currency_code'] = 'cny';
+		$amount = intval(round($order['realmoney'] * $channel['currency_rate'] * 100));
+
 		$data = [
 			'amount' => $amount,
-			'currency' => 'cny',
+			'currency' => strtolower($channel['currency_code']),
 			'confirm' => 'true',
 			'payment_method' => $payment_method_id,
 			'payment_method_types' => [$payment_method],
@@ -233,9 +274,11 @@ class stripe_plugin
 
 		require_once PAY_ROOT.'inc/StripeClient.php';
 
+		if(!$channel['currency_rate']) $channel['currency_rate'] = 1;
+		$amount = intval(round($order['refundmoney'] * $channel['currency_rate'] * 100));
+
 		try{
 			$stripe = new Stripe\StripeClient($channel['appid']);
-			$amount = intval(round($order['refundmoney'] * 100));
 			$data = [
 				'payment_intent' => $order['api_trade_no'],
 				'amount' => $amount,

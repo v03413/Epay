@@ -14,8 +14,8 @@ $channelrow=$DB->getRow("SELECT id,plugin,apptype FROM pre_channel WHERE id='{$o
 if(!$channelrow)sysmsg('支付通道不存在');
 
 $order['typename'] = $paytype['name'];
+$order['plugin'] = $channelrow['plugin'];
 $order['profits'] = \lib\Payment::updateOrderProfits($order, $channelrow['plugin']);
-$order['profits2'] = \lib\Payment::updateOrderProfits2($order, $channelrow['plugin']);
 
 try{
 	$result = \lib\Plugin::loadForSubmit($channelrow['plugin'], $trade_no);

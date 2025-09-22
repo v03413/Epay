@@ -25,6 +25,12 @@ class XunhupayClient
 		return $this->execute($url, $params);
 	}
 
+	//退款订单
+	public function do_refund($params){
+		$url = str_replace('/payment/do.html', '/payment/refund.html', $this->apiurl);
+		return $this->execute($url, $params);
+	}
+
 	//发起通用请求
 	public function execute($url, $params){
 		$publicParams = [
@@ -52,6 +58,11 @@ class XunhupayClient
 		$redirect_url = $this->get_redirect_url($url_qrcode);
 		if($redirect_url){
 			$url = getSubstr($redirect_url, 'data=', '&');
+			if($url){
+				return base64_decode($url);
+			}
+		}else{
+			$url = getSubstr($url_qrcode, 'data=', '&');
 			if($url){
 				return base64_decode($url);
 			}

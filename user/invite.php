@@ -31,7 +31,7 @@ $money_get = round(100*$conf['invite_rate']/100,2);
 		</div>
 		<div class="panel-body">
 		<p>● 用户通过下方推广链接注册成为商户后，每支付一笔订单，都会给你订单金额固定比例的分成。（分成金额最多不会超过订单手续费）</p>
-		<p>● 当前邀请返现比例：<span style="font-weight:700;color:#f05050;"><?php echo $conf['invite_rate']?>%</span>，即用户支付100元的订单，你会得到<?php echo $money_get?>元奖励</p>
+		<p>● 当前邀请返现比例：<span style="font-weight:700;color:#f05050;"><?php echo $conf['invite_rate']?>%</span>，即用户支付100元的<?php echo $conf['invite_order_type']==1?'手续费':'订单'?>，你会得到<?php echo $money_get?>元奖励</p>
 		</div>
 	</div>
 	<div class="row">
@@ -91,7 +91,7 @@ $money_get = round(100*$conf['invite_rate']/100,2);
   </div>
 
 <?php include 'foot.php';?>
-<script src="<?php echo $cdnpublic?>layer/3.1.1/layer.min.js"></script>
+<script src="<?php echo $cdnpublic?>layer/3.1.1/layer.js"></script>
 <script src="<?php echo $cdnpublic?>clipboard.js/1.7.1/clipboard.min.js"></script>
 <script src="../assets/js/bootstrap-table.min.js"></script>
 <script src="../assets/js/bootstrap-table-page-jump-to.min.js"></script>

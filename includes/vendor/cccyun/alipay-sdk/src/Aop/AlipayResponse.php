@@ -49,11 +49,12 @@ class AlipayResponse
     protected $signData;
 
 
-    /**
-     * @param $raw     原始数据
-     * @param $apiName 接口名称
-     */
-    public function __construct($raw, $apiName)
+	/**
+	 * @param string $raw 原始数据
+	 * @param string $apiName 接口名称
+	 * @throws \Exception
+	 */
+    public function __construct(string $raw, string $apiName)
     {
         $this->raw = $raw;
         $this->parsed = json_decode($raw, true);
@@ -64,12 +65,13 @@ class AlipayResponse
         $this->parseResponseData($apiName);
     }
 
-    /**
-     * 获取原始响应的被签名数据，用于验证签名.
-     *
-     * @param $apiName
-     */
-    protected function parseResponseData($apiName)
+	/**
+	 * 获取原始响应的被签名数据，用于验证签名.
+	 *
+	 * @param string $apiName
+	 * @throws \Exception
+	 */
+    protected function parseResponseData(string $apiName)
     {
         $nodeName = str_replace(".", "_", $apiName) . self::RESPONSE_SUFFIX;
         $nodeIndex = strpos($this->raw, $nodeName);
@@ -102,7 +104,7 @@ class AlipayResponse
      *
      * @return string
      */
-    public function getSignData()
+    public function getSignData(): ?string
     {
         return $this->signData;
     }
@@ -112,7 +114,7 @@ class AlipayResponse
      *
      * @return string
      */
-    public function getSign()
+    public function getSign(): ?string
     {
         if (isset($this->parsed[static::SIGN_NODE])) {
             return $this->parsed[static::SIGN_NODE];
@@ -127,13 +129,13 @@ class AlipayResponse
      *
      * @return mixed|object
      */
-    public function getData($assoc = true)
+    public function getData(bool $assoc = true)
     {
         if (!isset($this->parsed[$this->nodeName])){
             return null;
         }
         $result = $this->parsed[$this->nodeName];
-        if ($assoc == false) {
+        if (!$assoc) {
             $result = (object) ($result);
         }
         return $result;
@@ -144,7 +146,7 @@ class AlipayResponse
      *
      * @return bool
      */
-    public function isSuccess()
+    public function isSuccess(): bool
     {
         if (isset($this->parsed[static::ERROR_NODE])) {
             return false;
@@ -161,7 +163,7 @@ class AlipayResponse
      *
      * @return string
      */
-    public function getRaw()
+    public function getRaw(): string
     {
         return $this->raw;
     }

@@ -6,35 +6,68 @@ use Exception;
 
 class CommUtil
 {
-    public static $plugins = ['alipay','alipaysl','alipayd','wxpayn','wxpaynp','yeepay'];
-    public static $plugins2 = ['adapay'];
+    public static $plugins = ['alipay','alipaysl','alipayd','wxpayn','wxpaynp','yeepay','yseqt','chinaums','dinpay','adapay','duolabao','allinpay','huifu','haipay','heepay','kunpeng','kuaiqian','kuaiqianbank','yinyingtong','entpay'];
+    public static $no_order_plugins = ['chinaums','dinpay','duolabao','allinpay','huifu','haipay'];
 
+    /**
+     * @param array $channel
+     * @return IProfitSharing|false
+     */
     public static function getModel($channel){
         if($channel['plugin'] == 'alipay' || $channel['plugin'] == 'alipaysl' || $channel['plugin'] == 'alipayd'){
             return new Alipay($channel);
         }elseif($channel['plugin'] == 'wxpayn' || $channel['plugin'] == 'wxpaynp'){
             return new Wxpay($channel);
-        }elseif($channel['plugin'] == 'yeepay'){
-            return new Yeepay($channel);
+        }elseif($channel['plugin'] == 'kuaiqian' || $channel['plugin'] == 'kuaiqianbank'){
+            return new Kuaiqian($channel);
+        }elseif(in_array($channel['plugin'], self::$plugins)){
+            $classname = '\\lib\\ProfitSharing\\'.ucfirst($channel['plugin']);
+            if(class_exists($classname)){
+                return new $classname($channel);
+            }else{
+                return new Common($channel);
+            }
         }
         return false;
     }
 
+    public static function getReceiver($id){
+        global $DB;
+        $result = $DB->find('psreceiver', '*', ['id'=>$id]);
+        if(!$result) return $result;
+        $result['info'] = !empty($result['info']) ? json_decode($result['info'], true) : [['account'=>$result['account'], 'name'=>$result['name'], 'rate'=>$result['rate']]];
+        return $result;
+    }
+
+    public static function getOrder($trade_no){
+        global $DB;
+        $result = $DB->getRow("SELECT A.*,B.channel,B.account,B.name,B.rate FROM pre_psorder A LEFT JOIN pre_psreceiver B ON A.rid=B.id WHERE A.trade_no=:trade_no", [':trade_no'=>$trade_no]);
+        if(!$result) return $result;
+        $result['rdata'] = json_decode($result['rdata'], true);
+        return $result;
+    }
+
     //订单分账定时任务
     public static function task(){
-        global $DB;
+        global $DB, $conf;
         $limit = 10; //每次查询分账的订单数量
-        for($i=0;$i<$limit;$i++){
-            $srow=$DB->getRow("SELECT A.*,B.channel,B.account,B.name,C.uid,C.subchannel FROM pre_psorder A INNER JOIN pre_psreceiver B ON B.id=A.rid LEFT JOIN pre_order C ON C.trade_no=A.trade_no WHERE A.status=1 ORDER BY A.id ASC LIMIT 1");
-            if(!$srow)break;
+        $list = $DB->getAll("SELECT A.*,B.channel,B.account,B.name,B.rate,B.info,B.uid psuid,C.uid,C.subchannel,C.realmoney ordermoney FROM pre_psorder A INNER JOIN pre_psreceiver B ON B.id=A.rid LEFT JOIN pre_order C ON C.trade_no=A.trade_no WHERE A.status=1 ORDER BY A.id ASC LIMIT {$limit}");
+        foreach($list as $srow){
             self::process_item($srow);
         }
     
         $limit = 10; //每次提交分账的订单数量
-        for($i=0;$i<$limit;$i++){
-            $srow=$DB->getRow("SELECT A.*,B.channel,B.account,B.name,C.uid,C.subchannel FROM pre_psorder A INNER JOIN pre_psreceiver B ON B.id=A.rid LEFT JOIN pre_order C ON C.trade_no=A.trade_no WHERE A.status=0 AND TimeStampDiff(SECOND, A.addtime, NOW())>=60 ORDER BY A.id ASC LIMIT 1");
-            if(!$srow)break;
+        $list = $DB->getAll("SELECT A.*,B.channel,B.account,B.name,B.rate,B.info,B.uid psuid,C.uid,C.subchannel,C.realmoney ordermoney FROM pre_psorder A INNER JOIN pre_psreceiver B ON B.id=A.rid LEFT JOIN pre_order C ON C.trade_no=A.trade_no WHERE A.status=0 AND (A.addtime<=DATE_SUB(NOW(), INTERVAL 60 SECOND) AND A.delay=0 OR A.addtime<=DATE_SUB(NOW(), INTERVAL 24 HOUR) AND A.delay=1) ORDER BY A.id ASC LIMIT {$limit}");
+        foreach($list as $srow){
             self::process_item($srow);
+        }
+
+        if($conf['profits_failretry'] == 1){
+            $limit = 10; //每次提交分账的订单数量
+            $list = $DB->getAll("SELECT A.*,B.channel,B.account,B.name,B.rate,B.info,B.uid psuid,C.uid,C.subchannel,C.realmoney ordermoney FROM pre_psorder A INNER JOIN pre_psreceiver B ON B.id=A.rid LEFT JOIN pre_order C ON C.trade_no=A.trade_no WHERE A.status=3 AND (A.addtime<=DATE_SUB(NOW(), INTERVAL 24 HOUR) AND A.delay=0 OR A.addtime<=DATE_SUB(NOW(), INTERVAL 48 HOUR) AND A.delay=1) AND A.retry=0 AND A.addtime>DATE_SUB(NOW(), INTERVAL 3 DAY) ORDER BY A.id ASC LIMIT {$limit}");
+            foreach($list as $srow){
+                self::process_item($srow);
+            }
         }
     }
 
@@ -46,26 +79,42 @@ class CommUtil
         if(!$channel) return;
         $model = self::getModel($channel);
         // status:0-待分账,1-已提交,2-成功,3-失败
-        if($row['status']==0){
+        if($row['status']==0 || $row['status']==3){
             if($row['money'] == 0){
                 $DB->update('psorder', ['status'=>3,'result'=>'分账金额为0'], ['id'=>$id]);
                 echo $row['trade_no'].' 分账金额为0<br/>';
                 return;
             }
-            $result = $model->submit($row['trade_no'], $row['api_trade_no'], $row['account'], $row['name'], $row['money']);
+            $row['info'] = !empty($row['info']) ? json_decode($row['info'], true) : [['account'=>$row['account'], 'name'=>$row['name'], 'rate'=>$row['rate']]];
+            if(!empty($row['sub_trade_no'])){
+                $row['ordermoney'] = $DB->findColumn('suborder', 'money', ['sub_trade_no'=>$row['sub_trade_no']]);
+                $row['trade_no'] = $row['sub_trade_no'];
+            }
+            $result = $model->submit($row['trade_no'], $row['api_trade_no'], $row['ordermoney'], $row['info']);
             if($result['code'] == 0){
                 $DB->update('psorder', ['status'=>1,'settle_no'=>$result['settle_no']], ['id'=>$id]);
             }elseif($result['code'] == 1){
                 $DB->update('psorder', ['status'=>2,'settle_no'=>$result['settle_no']], ['id'=>$id]);
+                if(!empty($row['psuid']) && $channel['mode']==0){
+                    changeUserMoney($row['psuid'], $row['money'], false, '订单分账', $row['trade_no']);
+                }
             }elseif($result['code'] == -1){
                 $DB->update('psorder', ['status'=>3,'result'=>$result['msg']], ['id'=>$id]);
+                if($row['status']==3) $DB->update('psorder', ['retry'=>1], ['id'=>$id]);
+            }
+            if(isset($result['rdata'])){
+                $DB->update('psorder', ['money'=>$result['money'], 'rdata'=>json_encode($result['rdata'])], ['id'=>$id]);
             }
             echo $row['trade_no'].' '.$result['msg'].'<br/>';
         }elseif($row['status']==1){
+            if(!empty($row['sub_trade_no'])) $row['trade_no'] = $row['sub_trade_no'];
             $result = $model->query($row['trade_no'], $row['api_trade_no'], $row['settle_no']);
             if($result['code']==0){
                 if($result['status']==1){
                     $DB->update('psorder', ['status'=>2], ['id'=>$id]);
+                    if(!empty($row['psuid']) && $channel['mode']==0){
+                        changeUserMoney($row['psuid'], $row['money'], false, '订单分账', $row['trade_no']);
+                    }
                     $result = '分账成功';
                 }elseif($result['status']==2){
                     $DB->update('psorder', ['status'=>3,'result'=>$result['reason']], ['id'=>$id]);
@@ -80,63 +129,17 @@ class CommUtil
         }
     }
 
-
-    public static function addReceiver_adapay($channel, $member_id, $data){
-        $pay_config = require(PLUGIN_ROOT.$channel['plugin'].'/inc/config.php');
-        require(PLUGIN_ROOT.$channel['plugin'].'/inc/Build.class.php');
-
-        $account_info = [
-            'card_id' => $data['card_id'],
-            'card_name' => $data['card_name'],
-            'cert_id' => $data['cert_id'],
-            'cert_type' => '00',
-            'tel_no' => $data['tel_no'],
-            'bank_acct_type' => $data['bank_type'],
-        ];
-    
-        try{
-            $adapay = \AdaPay::config($pay_config);
-            $adapay->createMember($member_id);
-            $result = $adapay->createSettleAccount($member_id, $account_info);
-            return ['code'=>0, 'msg'=>'添加分账接收方成功', 'settleid'=>$result['id']];
-        } catch (Exception $e) {
-            return ['code'=>-1, 'msg'=>$e->getMessage()];
-        }
-    }
-
-    public static function editReceiver_adapay($channel, $member_id, $data, $settle_account_id){
-        $pay_config = require(PLUGIN_ROOT.$channel['plugin'].'/inc/config.php');
-        require(PLUGIN_ROOT.$channel['plugin'].'/inc/Build.class.php');
-
-        $account_info = [
-            'card_id' => $data['card_id'],
-            'card_name' => $data['card_name'],
-            'cert_id' => $data['cert_id'],
-            'cert_type' => '00',
-            'tel_no' => $data['tel_no'],
-            'bank_acct_type' => $data['bank_type'],
-        ];
-    
-        try{
-            $adapay = \AdaPay::config($pay_config);
-            $adapay->deleteSettleAccount($member_id, $settle_account_id);
-            $result = $adapay->createSettleAccount($member_id, $account_info);
-            return ['code'=>0, 'msg'=>'添加分账接收方成功', 'settleid'=>$result['id']];
-        } catch (Exception $e) {
-            return ['code'=>-1, 'msg'=>$e->getMessage()];
-        }
-    }
-
-    public static function deleteReceiver_adapay($channel, $member_id, $settle_account_id){
-        $pay_config = require(PLUGIN_ROOT.$channel['plugin'].'/inc/config.php');
-        require(PLUGIN_ROOT.$channel['plugin'].'/inc/Build.class.php');
-
-        try{
-            $adapay = \AdaPay::config($pay_config);
-            $adapay->deleteSettleAccount($member_id, $settle_account_id);
-            return ['code'=>0, 'msg'=>'删除分账接收方成功'];
-        } catch (Exception $e) {
-            return ['code'=>-1, 'msg'=>$e->getMessage()];
+    //分账结果异步回调
+    public static function processNotify($trade_no, $status, $errmsg = null, $settle_no = null){
+        global $DB;
+        $psorder = $DB->find('psorder', '*', ['trade_no'=>$trade_no]);
+        if($psorder){
+            if($psorder['status'] != $status){
+                $data = ['status'=>$status];
+                if($errmsg) $data['result'] = $errmsg;
+                if($settle_no) $data['settle_no'] = $settle_no;
+                $DB->update('psorder', $data, ['id'=>$psorder['id']]);
+            }
         }
     }
 }

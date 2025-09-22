@@ -1,10 +1,9 @@
 <?php
 include("./inc.php");
 $act=isset($_GET['act'])?daddslashes($_GET['act']):null;
+@header('Content-Type: application/json; charset=UTF-8');
 
 if(!checkRefererHost())exit('{"code":403}');
-
-@header('Content-Type: application/json; charset=UTF-8');
 
 $uid=intval($_POST['uid']);
 $money=daddslashes($_POST['money']);
@@ -34,7 +33,10 @@ if(!empty($paytype) && isset($_SESSION['paypage_typeid']) && isset($_SESSION['pa
 	}
 }
 
-$userrow = $DB->getRow("SELECT `mode`,`ordername`,`channelinfo`,`money` FROM `pre_user` WHERE `uid`='{$uid}' LIMIT 1");
+$userrow = $DB->getRow("SELECT `mode`,`ordername`,`channelinfo`,`money`,`pay_minmoney`,`pay_maxmoney` FROM `pre_user` WHERE `uid`='{$uid}' LIMIT 1");
+
+if($userrow['pay_maxmoney']>0 && $money>$userrow['pay_maxmoney'])showerrorjson('最大支付金额是'.$userrow['pay_maxmoney'].'元');
+if($userrow['pay_minmoney']>0 && $money<$userrow['pay_minmoney'])showerrorjson('最小支付金额是'.$userrow['pay_minmoney'].'元');
 
 $trade_no=date("YmdHis").rand(11111,99999);
 $return_url=$siteurl.'paypage/success.php?trade_no='.$trade_no;
@@ -82,12 +84,13 @@ if(!empty($paytype) && isset($_SESSION['paypage_typeid']) && isset($_SESSION['pa
 		$order['uid'] = $uid;
 		$order['addtime'] = $date;
 		$order['name'] = '在线收款';
-		$order['realmoney'] = $realmoney;
+		$order['realmoney'] = sprintf("%.2f", $realmoney);
 		$order['type'] = $typeid;
 		$order['channel'] = $channelid;
+		$order['subchannel'] = $subchannelid;
 		$order['typename'] = $paytype;
+		$order['plugin'] = $channel['plugin'];
 		$order['profits'] = \lib\Payment::updateOrderProfits($order, $channel['plugin']);
-		$order['profits2'] = \lib\Payment::updateOrderProfits2($order, $channel['plugin']);
 		$order['sub_openid'] = $payer;
 		
 		try{

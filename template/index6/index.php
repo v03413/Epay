@@ -21,10 +21,6 @@ if(!defined('IN_CRONLITE'))exit();
 	<link href="<?php echo STATIC_ROOT?>css/style-responsive.min.css" rel="stylesheet" />
 	<link href="<?php echo STATIC_ROOT?>css/theme/blue.css" id="theme" rel="stylesheet" />
 	<!-- ================== END BASE CSS STYLE ================== -->
-	
-	<!-- ================== BEGIN BASE JS ================== -->
-	<script src="<?php echo $cdnpublic?>pace/1.0.2/pace.min.js"></script>
-	<!-- ================== END BASE JS ================== -->
 </head>
 <body data-spy="scroll" data-target="#header-navbar" data-offset="51">
     <!-- begin #page-container -->
@@ -267,34 +263,16 @@ if(!defined('IN_CRONLITE'))exit();
             </div>
         </div>
         <!-- end #footer -->
-        
-        <!-- begin theme-panel -->
-        <div class="theme-panel">
-            <a href="javascript:;" data-click="theme-panel-expand" class="theme-collapse-btn"><i class="fa fa-cog"></i></a>
-            <div class="theme-panel-content">
-                <ul class="theme-list clearfix">
-                    <li><a href="javascript:;" class="bg-purple" data-theme="purple" data-click="theme-selector" data-toggle="tooltip" data-trigger="hover" data-container="body" data-title="Purple">&nbsp;</a></li>
-                    <li class="active"><a href="javascript:;" class="bg-blue" data-theme="blue" data-click="theme-selector" data-toggle="tooltip" data-trigger="hover" data-container="body" data-title="Blue">&nbsp;</a></li>
-                    <li><a href="javascript:;" class="bg-green" data-theme="default" data-click="theme-selector" data-toggle="tooltip" data-trigger="hover" data-container="body" data-title="Default">&nbsp;</a></li>
-                    <li><a href="javascript:;" class="bg-orange" data-theme="orange" data-click="theme-selector" data-toggle="tooltip" data-trigger="hover" data-container="body" data-title="Orange">&nbsp;</a></li>
-                    <li><a href="javascript:;" class="bg-red" data-theme="red" data-click="theme-selector" data-toggle="tooltip" data-trigger="hover" data-container="body" data-title="Red">&nbsp;</a></li>
-                </ul>
-            </div>
-        </div>
-        <!-- end theme-panel -->
     </div>
     <!-- end #page-container -->
 	
 	<!-- ================== BEGIN BASE JS ================== -->
 	<script src="<?php echo $cdnpublic?>jquery/1.12.4/jquery.min.js"></script>
-	<script src="<?php echo $cdnpublic?>jquery-migrate/1.4.1/jquery-migrate.min.js"></script>
 	<script src="<?php echo $cdnpublic?>twitter-bootstrap/3.4.1/js/bootstrap.min.js"></script>
 	<!--[if lt IE 9]>
 		<script src="<?php echo $cdnpublic?>html5shiv/3.7.3/html5shiv.min.js"></script>
 		<script src="<?php echo $cdnpublic?>respond.js/1.4.2/respond.min.js"></script>
 	<![endif]-->
-	<script src="<?php echo $cdnpublic?>jquery-cookie/1.4.1/jquery.cookie.min.js"></script>
-	<script src="<?php echo $cdnpublic?>scrollmonitor/1.2.0/scrollMonitor.js"></script>
 	<script src="<?php echo STATIC_ROOT?>js/apps.min.js"></script>
 	<!-- ================== END BASE JS ================== -->
 	

@@ -48,7 +48,7 @@ function showQrCode(styleName){
 	$("#load").show();
 	$("#qrcode").hide();
 	$("#code").empty();
-	styleName = styleName || 'dongxue';
+	styleName = styleName || 'default';
 	var qrWidth = config[styleName].qrWidth;
 	var qrHeight = config[styleName].qrHeight;
 	var foreground = config[styleName].foreground;

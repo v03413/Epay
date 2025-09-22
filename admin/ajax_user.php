@@ -32,10 +32,18 @@ case 'userList':
 	if(isset($_POST['value']) && !empty($_POST['value'])) {
 		$sql.=" AND `{$_POST['column']}`='{$_POST['value']}'";
 	}
+	if(isset($_POST['order_days']) && !empty($_POST['order_days'])) {
+		$order_days = intval($_POST['order_days']);
+		$sql.=" AND uid NOT IN (SELECT DISTINCT uid FROM pre_order WHERE date>=NOW()-INTERVAL {$order_days} DAY)";
+	}
+	$order = "uid desc";
+	if(isset($_POST['order']) && !empty($_POST['order'])) {
+		$order=str_replace('_', ' ', $_POST['order']);
+	}
 	$offset = intval($_POST['offset']);
 	$limit = intval($_POST['limit']);
 	$total = $DB->getColumn("SELECT count(*) from pre_user WHERE{$sql}");
-	$list = $DB->getAll("SELECT * FROM pre_user WHERE{$sql} order by uid desc limit $offset,$limit");
+	$list = $DB->getAll("SELECT * FROM pre_user WHERE{$sql} order by {$order} limit $offset,$limit");
 	$list2 = [];
 	foreach($list as $row){
 		if($row['endtime']!=null && strtotime($row['endtime'])<time()){
@@ -53,6 +61,20 @@ break;
 
 case 'recordList':
 	$sql=" 1=1";
+	if(isset($_POST['uid']) && !empty($_POST['uid'])) {
+		$uid = intval($_POST['uid']);
+		$sql.=" AND `uid`='$uid'";
+	}
+	if(!empty($_POST['starttime']) || !empty($_POST['endtime'])){
+		if(!empty($_POST['starttime'])){
+			$starttime = daddslashes($_POST['starttime']);
+			$sql.=" AND `date`>='{$starttime} 00:00:00'";
+		}
+		if(!empty($_POST['endtime'])){
+			$endtime = daddslashes($_POST['endtime']);
+			$sql.=" AND `date`<='{$endtime} 23:59:59'";
+		}
+	}
 	if(isset($_POST['value']) && !empty($_POST['value'])) {
 		$sql.=" AND `{$_POST['column']}`='{$_POST['value']}'";
 	}
@@ -62,6 +84,37 @@ case 'recordList':
 	$list = $DB->getAll("SELECT * FROM pre_record WHERE{$sql} order by id desc limit $offset,$limit");
 
 	exit(json_encode(['total'=>$total, 'rows'=>$list]));
+break;
+
+case 'record_stats':
+	$sql=" 1=1";
+	if(isset($_POST['uid']) && !empty($_POST['uid'])) {
+		$uid = intval($_POST['uid']);
+		$sql.=" AND `uid`='$uid'";
+	}
+	if(!empty($_POST['starttime']) || !empty($_POST['endtime'])){
+		if(!empty($_POST['starttime'])){
+			$starttime = daddslashes($_POST['starttime']);
+			$sql.=" AND `date`>='{$starttime} 00:00:00'";
+		}
+		if(!empty($_POST['endtime'])){
+			$endtime = daddslashes($_POST['endtime']);
+			$sql.=" AND `date`<='{$endtime} 23:59:59'";
+		}
+	}
+	if(isset($_POST['value']) && !empty($_POST['value'])) {
+		$sql.=" AND `{$_POST['column']}`='{$_POST['value']}'";
+	}
+	$result = $DB->getRow("SELECT 
+        SUM(CASE WHEN action = 1 THEN money ELSE 0 END) AS incMoney,
+        SUM(CASE WHEN action = 2 THEN money ELSE 0 END) AS decMoney
+        FROM pre_record WHERE {$sql}");
+	$data = [
+        'incMoney' => number_format($result['incMoney'] ?? 0, 2, '.', ''),
+        'decMoney' => number_format($result['decMoney'] ?? 0, 2, '.', ''),
+        'totalMoney' => number_format(($result['incMoney'] ?? 0) - ($result['decMoney'] ?? 0), 2, '.', ''),
+    ];
+    exit(json_encode(['code' => 0, 'data' => $data]));
 break;
 
 case 'userPayStat':
@@ -95,6 +148,8 @@ case 'userPayStat':
 	}
 
 	if($type == 4){
+		$startday .= ' 00:00:00';
+		$endday .= ' 23:59:59';
 		$rs=$DB->query("SELECT uid,type,channel,money from pre_transfer where status=1 and paytime>='$startday' and paytime<='$endday'");
 		while($row = $rs->fetch())
 		{
@@ -140,6 +195,16 @@ case 'userPayStat':
 		}
 	}
 	ksort($data);
+	//计算总计
+	$total = ['uid'=>'总计'];
+	foreach($data as $row){
+		foreach($row as $key=>$val){
+			if($key=='uid')continue;
+			if(!array_key_exists($key, $total)) $total[$key] = $val;
+			else $total[$key] += $val;
+		}
+	}
+	array_unshift($data, $total);
 	$list = [];
 	foreach($data as $row){
 		$list[] = $row;
@@ -195,6 +260,29 @@ case 'userTransferStat':
 		$list[] = $row;
 	}
 	exit(json_encode(['code'=>0, 'columns'=>$columns, 'data'=>$list]));
+break;
+
+case 'buyerStat':
+	$startday = trim($_POST['startday']);
+	$endday = trim($_POST['endday']);
+	$method = intval($_POST['method']);
+	if($method == '2') $column = 'mobile';
+	else if($method == '1') $column = 'ip';
+	else $column = 'buyer';
+	if(!$startday || !$endday)exit(json_encode(['code'=>0, 'msg'=>'no day']));
+	$sql = "`date` BETWEEN '{$startday}' AND '{$endday}' AND {$column} is not null AND status>0";
+	if(isset($_POST['type']) && !empty($_POST['type'])) {
+		$type = intval($_POST['type']);
+		$sql.=" AND `type`='$type'";
+	}
+	$list = $DB->getAll("SELECT A.*,ISNULL(B.id) is_black
+		FROM (SELECT {$column} `user`,COUNT(*) AS order_count,MAX(trade_no) trade_no
+		FROM pay_order
+		WHERE {$sql}
+		GROUP BY {$column}
+		ORDER BY order_count DESC) A
+		LEFT JOIN pay_blacklist B ON A.`user`=B.content");
+	exit(json_encode($list));
 break;
 
 case 'logList':
@@ -284,8 +372,7 @@ case 'saveGroup':
 	}elseif($_POST['action'] == 'changebuy'){
 		$gid=intval($_POST['gid']);
 		$status=intval($_POST['status']);
-		$sql = "UPDATE pre_group SET isbuy='{$status}' WHERE gid='$gid'";
-		if($DB->exec($sql))exit('{"code":0,"msg":"修改上架状态成功！"}');
+		if($DB->update('group',['isbuy'=>$status],['gid'=>$gid]))exit('{"code":0,"msg":"修改上架状态成功！"}');
 		else exit('{"code":-1,"msg":"修改上架状态失败['.$DB->error().']"}');
 	}else{
 		$gid=intval($_POST['gid']);
@@ -306,12 +393,14 @@ case 'saveGroupPrice':
 	$prices = $_POST['price'];
 	$expires = $_POST['expire'];
 	$sorts = $_POST['sort'];
+	$visibles = $_POST['visible'];
 	foreach($prices as $gid=>$item){
 		$price = trim($item);
 		$expire = intval($expires[$gid]);
 		$sort = trim($sorts[$gid]);
-		if(empty($price)||!is_numeric($price))exit('{"code":-1,"msg":"GID:'.$gid.'的售价填写错误"}');
-		$DB->exec("UPDATE pre_group SET price='{$price}',expire='{$expire}',sort='{$sort}' WHERE gid='$gid'");
+		$visible = str_replace('，',',',trim($visibles[$gid]));
+		if(!is_numeric($price)||$price<0)exit('{"code":-1,"msg":"GID:'.$gid.'的售价填写错误"}');
+		$DB->update('group', ['price'=>$price, 'expire'=>$expire, 'sort'=>$sort, 'visible'=>$visible], ['gid'=>$gid]);
 	}
 	exit('{"code":0,"msg":"保存成功！"}');
 break;
@@ -337,7 +426,7 @@ case 'addUser':
 		'addtime' => 'NOW()',
 	];
 
-	if(empty($data['account']) || empty($data['username'])) exit('{"code":-1,"msg":"必填项不能为空！"}');
+	if(empty($data['phone']) && empty($data['email'])) exit('{"code":-1,"msg":"手机号和邮箱不能都为空"}');
 
 	if(!empty($data['phone'])){
 		if($DB->find('user','*',['phone'=>$data['phone']])) exit('{"code":-1,"msg":"手机号已存在！"}');
@@ -363,6 +452,7 @@ case 'editUser':
 	if(!$rows) exit('{"code":-1,"msg":"当前商户不存在！"}');
 	$data = [
 		'gid' => intval($_POST['gid']),
+		'upid' => intval($_POST['upid']),
 		'settle_id' => intval($_POST['settle_id']),
 		'account' => trim($_POST['account']),
 		'username' => trim($_POST['username']),
@@ -383,9 +473,10 @@ case 'editUser':
 		'pay' => intval($_POST['pay']),
 		'settle' => intval($_POST['settle']),
 		'status' => intval($_POST['status']),
+		'open_code' => intval($_POST['open_code']),
+		'remain_money' => !empty($_POST['remain_money']) ? trim($_POST['remain_money']) : null,
+		'deposit' => !empty($_POST['deposit']) ? trim($_POST['deposit']) : null,
 	];
-
-	if(empty($data['account']) || empty($data['username'])) exit('{"code":-1,"msg":"必填项不能为空！"}');
 
 	if($DB->update('user', $data, ['uid'=>$uid])!==false){
 		if(!empty($_POST['pwd'])){
@@ -396,6 +487,29 @@ case 'editUser':
 	}else{
 		exit('{"code":-1,"msg":"修改商户信息失败！'.$DB->error().'"}');
 	}
+break;
+case 'edit_keytype':
+	$uid=intval($_POST['uid']);
+	$keytype=intval($_POST['keytype']);
+	$sqs = $DB->update('user', ['keytype'=>$keytype], ['uid'=>$uid]);
+	if($sqs!==false){
+		exit('{"code":1,"msg":"succ"}');
+	}else{
+		exit('{"code":-1,"msg":"保存失败！'.$DB->error().'"}');
+	}
+break;
+case 'resetKey':
+	$uid=intval($_POST['uid']);
+	$key = random(32);
+	$sql = "UPDATE pre_user SET `key`='$key' WHERE uid='$uid'";
+	if($DB->exec($sql)!==false)exit('{"code":0,"msg":"重置密钥成功","key":"'.$key.'"}');
+	else exit('{"code":-1,"msg":"重置密钥失败['.$DB->error().']"}');
+break;
+case 'createRsaPair':
+	$uid=intval($_POST['uid']);
+	$keypair = generate_key_pair();
+	$DB->update('user', ['publickey'=>$keypair['public_key']], ['uid'=>$uid]);
+	exit(json_encode(['code'=>0, 'msg'=>'succ', 'public_key'=>$keypair['public_key'], 'private_key'=>$keypair['private_key']]));
 break;
 case 'editUserChannelInfo':
 	$uid=intval($_GET['uid']);
@@ -514,6 +628,17 @@ case 'delDomain':
 	$id=intval($_POST['id']);
 	if($DB->exec("DELETE FROM pre_domain WHERE id='$id'")!==false)exit('{"code":0,"msg":"succ"}');
 	else exit('{"code":-1,"msg":"删除失败['.$DB->error().']"}');
+break;
+case 'domain_operation':
+	$status=is_numeric($_POST['status'])?intval($_POST['status']):exit('{"code":-1,"msg":"请选择操作"}');
+	$checkbox=$_POST['checkbox'];
+	$i=0;
+	foreach($checkbox as $id){
+		if($status==3)$DB->exec("DELETE FROM pre_domain WHERE id='$id'");
+		else $DB->exec("UPDATE pre_domain SET status='$status',endtime=NOW() WHERE id='$id'");
+		$i++;
+	}
+	exit('{"code":0,"msg":"成功改变'.$i.'个记录状态"}');
 break;
 
 case 'getChannels':
@@ -646,6 +771,14 @@ case 'delBlack':
 	$id=intval($_POST['id']);
 	if($DB->exec("DELETE FROM pre_blacklist WHERE id='$id'")!==false)exit('{"code":0,"msg":"succ"}');
 	else exit('{"code":-1,"msg":"删除失败['.$DB->error().']"}');
+break;
+case 'batchdelBlack':
+	$checkbox=$_POST['checkbox'];
+	$i = 0;
+	if(!empty($checkbox)){
+		$i = $DB->exec("DELETE FROM pre_blacklist WHERE id IN (".implode(',',$checkbox).")");
+	}
+	exit('{"code":0,"msg":"成功删除了'.$i.'个黑名单"}');
 break;
 
 case 'delRecord':

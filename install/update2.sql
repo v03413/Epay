@@ -114,27 +114,6 @@ CREATE TABLE IF NOT EXISTS `pre_psorder` (
  KEY `trade_no` (`trade_no`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
-CREATE TABLE IF NOT EXISTS `pre_psreceiver2` (
-  `id` int(11) unsigned NOT NULL auto_increment,
-  `channel` int(11) NOT NULL,
-  `uid` int(11) DEFAULT NULL,
-  `bank_type` tinyint(4) NOT NULL,
-  `card_id` varchar(128) NOT NULL,
-  `card_name` varchar(128) NOT NULL,
-  `tel_no` varchar(20) NOT NULL,
-  `cert_id` varchar(30) DEFAULT NULL,
-  `bank_code` varchar(20) DEFAULT NULL,
-  `prov_code` varchar(20) DEFAULT NULL,
-  `area_code` varchar(20) DEFAULT NULL,
-  `settleid` varchar(50) DEFAULT NULL,
-  `rate` varchar(10) DEFAULT NULL,
-  `minmoney` varchar(10) DEFAULT NULL,
-  `status` tinyint(1) NOT NULL DEFAULT '0',
-  `addtime` datetime DEFAULT NULL,
- PRIMARY KEY (`id`),
- KEY `channel` (`channel`,`uid`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
-
 CREATE TABLE IF NOT EXISTS `pre_subchannel` (
   `id` int(11) unsigned NOT NULL auto_increment,
   `channel` int(11) NOT NULL,
@@ -219,7 +198,7 @@ ALTER TABLE `pre_wxkfaccount`
 ADD COLUMN `name` varchar(300) DEFAULT NULL;
 
 ALTER TABLE `pre_user`
-ADD COLUMN `msgconfig` varchar(150) DEFAULT NULL;
+ADD COLUMN `msgconfig` varchar(300) DEFAULT NULL;
 
 CREATE TABLE IF NOT EXISTS `pre_transfer` (
   `biz_no` char(19) NOT NULL,
@@ -295,3 +274,49 @@ CREATE TABLE IF NOT EXISTS `pre_refundorder` (
  KEY `out_refund_no` (`out_refund_no`,`uid`),
  KEY `trade_no` (`trade_no`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+ALTER TABLE `pre_log`
+ADD INDEX `logincheck` (`ip`,`date`,`uid`);
+ALTER TABLE `pre_order`
+ADD COLUMN `bill_trade_no` varchar(150) DEFAULT NULL,
+ADD INDEX `bill_trade_no` (`bill_trade_no`);
+
+ALTER TABLE `pre_user`
+ADD COLUMN `remain_money` varchar(20) DEFAULT NULL,
+ADD COLUMN `open_code` tinyint(1) NOT NULL DEFAULT '0';
+
+ALTER TABLE `pre_psreceiver`
+ADD COLUMN `subchannel` int(11) DEFAULT NULL;
+
+ALTER TABLE `pre_transfer`
+ADD COLUMN `addtime` datetime DEFAULT NULL,
+ADD COLUMN `ext` text DEFAULT NULL;
+
+ALTER TABLE `pre_settle`
+ADD COLUMN `transfer_channel` int(10) unsigned DEFAULT NULL,
+ADD COLUMN `transfer_no` varchar(64) DEFAULT NULL,
+ADD COLUMN `transfer_ext` text DEFAULT NULL,
+ADD INDEX `transfer_no` (`transfer_no`);
+
+ALTER TABLE `pre_order`
+ADD COLUMN `mobile` varchar(100) DEFAULT NULL;
+
+ALTER TABLE `pre_user`
+ADD COLUMN `deposit` decimal(10,2) DEFAULT NULL;
+
+ALTER TABLE `pre_order`
+MODIFY COLUMN `ip` varchar(50) DEFAULT NULL;
+ALTER TABLE `pre_log`
+MODIFY COLUMN `ip` varchar(50) DEFAULT NULL;
+ALTER TABLE `pre_regcode`
+MODIFY COLUMN `ip` varchar(50) DEFAULT NULL;
+ALTER TABLE `pre_user`
+MODIFY COLUMN `msgconfig` varchar(300) DEFAULT NULL;
+
+ALTER TABLE `pre_group`
+ADD COLUMN `visible` varchar(30) DEFAULT NULL;
+ALTER TABLE `pre_psorder`
+ADD COLUMN `delay` tinyint(1) NOT NULL DEFAULT '0',
+ADD INDEX `addtime` (`addtime`,`delay`,`status`);
+ALTER TABLE `pre_order`
+MODIFY COLUMN `buyer` varchar(100) DEFAULT NULL;

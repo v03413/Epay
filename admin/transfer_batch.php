@@ -3,161 +3,244 @@
  * 批量转账页面
 **/
 include("../includes/common.php");
-$type = isset($_GET['type'])?intval($_GET['type']):exit('no type');
-if($type == 1){
+$type = isset($_GET['type'])?daddslashes($_GET['type']):exit('no type');
+if($type == 'alipay'){
 	$typename = '支付宝';
-	$method = '单笔转账到支付宝账户接口';
-}elseif($type == 2){
+	$default_channel = $conf['transfer_alipay'];
+}elseif($type == 'wxpay'){
 	$typename = '微信';
-	$method = '微信商家转账到零钱接口';
-}elseif($type == 3){
+	$default_channel = $conf['transfer_wxpay'];
+}elseif($type == 'qqpay'){
 	$typename = 'QQ钱包';
-	$method = 'QQ钱包企业付款接口';
-}elseif($type == 4){
+	$default_channel = $conf['transfer_qqpay'];
+}elseif($type == 'bank'){
 	$typename = '银行卡';
-	$method = '支付宝单笔转账到银行卡接口';
+	$default_channel = $conf['transfer_bank'];
+}else{
+	sysmsg('参数错误');
 }
+$channel_select = $DB->getAll("SELECT id,name,plugin FROM pre_channel WHERE plugin IN (SELECT name FROM pre_plugin WHERE transtypes LIKE '%".$type."%')");
+
 $title=$typename.'批量转账';
 include './head.php';
 if($islogin==1){}else exit("<script language='javascript'>window.location.href='./login.php';</script>");
 ?>
   <div class="container" style="padding-top:70px;">
-<?php
-if(!isset($_SESSION['paypwd']) || $_SESSION['paypwd']!==$conf['admin_paypwd'])showmsg('支付密码错误，请返回重新进入该页面');
-
-if(isset($_GET['batch'])){
-	$batch=$_GET['batch'];
-	$row=$DB->getRow("SELECT * from pre_batch where batch='$batch'");
-	if(!$row)showmsg('批次号不存在');
-	$list=$DB->getAll("SELECT * FROM pre_settle WHERE batch='{$batch}' and type={$type}");
-
-?>
-<script>
-var paytype = '<?php echo $type?>';
-function SelectAll(chkAll) {
-	var items = $('.uins');
-	for (i = 0; i < items.length; i++) {
-		if (items[i].id.indexOf("uins") != -1) {
-			if (items[i].type == "checkbox") {
-				items[i].checked = chkAll.checked;
-			}
-		}
-	}
-}
-function Transfer(){
-	var url="ajax_settle.php?act=transfer";
-	$("input[name=uins]:checked:first").each(function(){
-		var checkself=$(this);
-		var id=checkself.val();
-		var statusself=$('#id'+id);
-		statusself.html("<img src='../assets/img/load.gif' height=22>");
-		$.post(url,'type='+paytype+'&id='+id, function(d) {
-			if(d.code==0){
-				transnum++;
-				var num = $('#donenum').text();
-				num=parseInt(num);
-				num++;
-				$('#donenum').text(num);
-				if(d.ret==1){
-					statusself.html('<font color="green">成功</font>');
-				}else if(d.ret==2){
-					statusself.html('<font color="green">已完成</font>');
-				}else{
-					statusself.html('<font color="red">失败</font>');
-				}
-				$('#res'+id).html('<font color="blue">'+d.result+'</font>');
-				checkself.attr('checked',false);
-				Transfer();
-			}else if(d.code==-1){
-				statusself.html('<font color="red">失败</font>');
-				alert(d.msg);
-			}else{
-				statusself.html('<font color="red">失败</font>');
-			}
-		});
-		return true;
-	});
-}
-var transnum = 0;
-$(document).ready(function(){
-	var allmoney = 0;
-	var items = $('.money');
-	for (i = 0; i < items.length; i++) {
-		allmoney+=parseFloat(items[i].innerHTML);
-	}
-	$('#allmoney').html('总金额:'+allmoney.toFixed(2));
-	$('#startsend').click(function(){
-		var self=$(this);
-		if (self.attr("data-lock") === "true") return;
-			else self.attr("data-lock", "true");
-		self.html('正在转账中');
-		Transfer();
-		if(transnum<1) self.html('没有待转账的记录');
-		else self.html('转账处理完成');
-		self.attr("data-lock", "false");
-	});
-	$('.recheck').click(function(){
-		var self=$(this),
-			id=self.attr('uin');
-		var url="ajax_settle.php?act=transfer";
-		self.html("<img src='../assets/img/load.gif' height=22>");
-		$.post(url,'type='+paytype+'&id='+id, function(d) {
-			if(d.code==0){
-				if(d.ret==1){
-					self.html('<font color="green">成功</font>');
-				}else if(d.ret==2){
-					self.html('<font color="green">已完成</font>');
-				}else{
-					self.html('<font color="red">失败</font>');
-				}
-				$('#res'+id).html('<font color="blue">'+d.result+'</font>');
-				$('.uins[value='+id+']').attr('checked',false);
-				self.removeClass('nocheck');
-			}else if(d.code==-1){
-				self.html('<font color="red">失败</font>');
-				alert(d.msg);
-			}else{
-				self.html('<font color="red">失败</font>');
-			}
-		});
-	});
-});
-</script>
     <div class="col-md-12 center-block" style="float: none;">
 <div class="panel panel-default">
 	<div class="panel-heading" style="text-align:center">
-		<div class="panel-title"><h3 class="panel-title"><?php echo $typename?>批量转账（使用<?php echo $method?>）</h3>
-			<div class="input-group" style="padding:8px 0;">
-				<div class="input-group-addon btn">全选<input type="checkbox" onclick="SelectAll(this)" /></div>
-				<div class="input-group-addon btn" id="startsend">点此开始转账</div>
-				<div class="input-group-addon btn"><span id="allmoney">总金额</span></div>
-			</div>
-			<div id="result"></div>
+		<div class="panel-title"><p><h3 class="panel-title"><?php echo $typename?>批量转账</h3></p>
+			<div class="form-group"><div class="input-group"><div class="input-group-addon">通道选择</div>
+				<select name="channel" class="form-control">
+					<?php foreach($channel_select as $channel){echo '<option value="'.$channel['id'].'" '.($channel['id']==$default_channel?'selected':'').'>'.$channel['name'].''.($channel['id']==$default_channel?'（默认）':'').'</option>';} ?>
+				</select>
+			</div></div>
+			<div class="form-group"><div class="input-group"><div class="input-group-addon">收款列表</div>
+				<button type="button" class="btn btn-default btn-block" id="importExcel">导入Excel</button><span type="button" class="input-group-addon"><a href="/assets/files/transfer.xlsx">下载Excel模板</a></span>
+			</div></div>
+			<div class="form-group"><div class="input-group"><div class="input-group-addon">支付密码</div>
+				<input type="text" class="form-control" name="paypwd" placeholder="请输入支付密码" required>
+			</div></div>
+			<div class="form-group"><div class="btn-group btn-group-justified" style="padding:8px 0;">
+				<span type="button" class="input-group-addon">全选<input type="checkbox" style="margin-left:5px;" onclick="SelectAll(this)" /></span>
+				<a type="button" class="btn btn-default" id="startsend">点此开始转账</a>
+				<span type="button" class="input-group-addon" id="allmoney">总金额</span>
+			</div></div>
+			<input type="file" id="excelFile" accept=".xlsx,.xls,.csv" style="display:none">
+			<small id="result" style="color:chocolate">总共<span id="allnum">0</span>个记录,已经处理<span id="donenum">0</span>个记录！</small>
 		</div>
 	</div>
 </div>
 
+
 <div class="panel panel-primary">
 	<table class="table table-bordered table-condensed">
-		<tbody>
+		<thead>
 			<tr>
-			<td align="center"><span style="color:silver;"><b>ID</b></span></td>
-			<td align="center"><span style="color:silver;"><b>商户ID</b></span></td>
-			<td align="center"><span style="color:silver;"><b>结算账号</b></span></td>
-			<td align="center"><span style="color:silver;"><b>结算姓名</b></span></td>
-			<td align="center"><span style="color:silver;"><b>金额</b></span></td>
-			<td align="center"><span style="color:silver;"><b>操作</b></span></td>
+			<th style="color:silver;text-align:center"><b>序号</b></th>
+			<th style="color:silver;text-align:center"><b>收款账号</b></th>
+			<th style="color:silver;text-align:center"><b>收款人姓名</b></th>
+			<th style="color:silver;text-align:center"><b>转账金额</b></th>
+			<th style="color:silver;text-align:center"><b>转账备注</b></th>
+			<th style="color:silver;text-align:center"><b>操作/状态</b></th>
 			</tr>
-			<?php
-			echo '<tr><td colspan="6" align="center">总共<span id="hyall">'.count($list).'<span>个记录,已经处理<span id="donenum">0</span>个记录！</td></tr>';
-			foreach($list as $row) {
-			echo '<tr><td uin="'.$row['id'].'"><input name="uins" type="checkbox" id="uins" class="uins" value="'.$row['id'].'" '.($row['transfer_status']!=1?'checked':null).'>'.$row['id'].'</td><td>'.$row['uid'].'</td><td>'.$row['account'].'</td><td>'.$row['username'].'</td><td class="money">'.$row['realmoney'].'</td><td id="id'.$row['id'].'" uin="'.$row['id'].'" class="nocheck recheck" align="center">'.($row['transfer_status']!=1?'<span class="btn btn-xs btn-block btn-primary">立即转账</span>':'<font color="green">已完成</font>').'</td></tr><tr><td><span style="color:silver;">结果</span></td><td colspan="5" id="res'.$row['id'].'"><font color="blue">'.($row['transfer_status']==1?'转账订单号:'.$row['transfer_result'].' 支付时间:'.$row['transfer_date']:$row['transfer_result']).'</font></td></tr>';
-			}
-			?>
+		</thead>
+		<tbody id="list">
 		</tbody>
+	</table>
+</div>
+<script src="<?php echo $cdnpublic?>layer/3.1.1/layer.js"></script>
+<script src="/assets/vendor/xlsx/xlsx.full.min.js"></script>
+<script>
+function SelectAll(checkbox) {
+	var isChecked = $(checkbox).is(':checked');
+	$('#list input[type="checkbox"]').prop('checked', isChecked);
+}
+
+$(function(){
+	// 导入Excel按钮点击
+	$('#importExcel').click(function(){
+		$('#excelFile').click();
+	});
+
+	// Excel文件选择处理
+	$('#excelFile').change(function(e){
+		var file = e.target.files[0];
+		if(!file) return;
+		
+		var reader = new FileReader();
+		reader.onload = function(e){
+			var data = new Uint8Array(e.target.result);
+			var workbook = XLSX.read(data, {type: 'array'});
+			var firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+			var jsonData = XLSX.utils.sheet_to_json(firstSheet, {header:['index','account','name','money','remark']});
+
+			// 清空表格并渲染新数据
+			$('#list').empty();
+			var totalMoney = 0;
+			var totalCount = 0;
+			jsonData.forEach((item, i) => {
+				if(i==0 || !item.index || !item.account || !item.money) return;
+				
+				totalMoney += parseFloat(item.money) || 0;
+				
+				// 第一行：转账信息
+				$('#list').append(`
+					<tr>
+						<td><input type="checkbox" checked> ${item.index}</td>
+						<td>${item.account}</td>
+						<td>${item.name||''}</td>
+						<td>${item.money}</td>
+						<td>${item.remark||''}</td>
+						<td style="text-align:center"><button class="btn btn-xs btn-primary submit-btn">提交转账</button></td>
+					</tr>
+					<tr>
+						<td><span style="color:silver;">结果</span></td><td colspan="5" class="result-cell"></td>
+					</tr>
+				`);
+				totalCount++;
+			});
+			
+			$('#allnum').text(totalCount);
+			$('#allmoney').text('总金额：'+totalMoney.toFixed(2));
+		};
+		reader.readAsArrayBuffer(file);
+	});
+
+	// 提交转账
+	function submitTransfer(row, callback) {
+		var btn = row.find('.submit-btn');
+		var nextRow = row.next();
+		var checkbox = row.find('input[type="checkbox"]');
+		if(row.find('td:nth-child(6)').text().includes('转账成功')){
+			checkbox.prop('checked', false);
+			if(typeof callback === 'function') callback(false);
+			return;
+		}
+		var paypwd = $('input[name="paypwd"]').val();
+		if(paypwd == ''){
+			layer.alert('请输入支付密码', {icon: 2, title: '提示'});
+			if(typeof callback === 'function') callback(false);
+			return;
+		}
+		var channel = $('select[name="channel"]').val();
+		if(channel == ''){
+			layer.alert('请选择支付通道', {icon: 2, title: '提示'});
+			if(typeof callback === 'function') callback(false);
+			return;
+		}
+		
+		btn.hide().after('<img src="../assets/img/load.gif" height="22">');
+		
+		// 获取转账数据
+		var transferData = {
+			type: '<?php echo $type?>',
+			channel: channel,
+			paypwd: paypwd,
+			account: row.find('td:nth-child(2)').text(),
+			name: row.find('td:nth-child(3)').text(),
+			money: row.find('td:nth-child(4)').text(),
+			desc: row.find('td:nth-child(5)').text(),
+		};
+		
+		$.post('./ajax_transfer.php?act=batch_submit', transferData, function(result){
+
+			row.find('img').remove();
+			var rescode = false;
+			if(result.code == 0){
+				// 成功
+				btn.replaceWith(result.status==1?'<font color="green">转账成功</font>':'<font color="green">正在处理</font>');
+				nextRow.find('.result-cell').html('<font color="green">'+result.msg+'</font>');
+				checkbox.prop('checked', false);
+				rescode = true;
+			}else if(result.code == -1){
+				// 收款方原因失败
+				btn.replaceWith('<font color="red">转账失败</font>');
+				nextRow.find('.result-cell').html('<font color="red">'+result.msg+'</font>');
+				checkbox.prop('checked', false);
+				rescode = true;
+			}else{
+				// 付款方原因失败
+				layer.alert(result.msg, {icon: 2, title: '转账失败'});
+				btn.show();
+			}
+			
+			if(typeof callback === 'function') {
+				callback(rescode);
+			}
+		}, 'json');
+		// });
+	}
+
+	// 单笔提交
+	$(document).on('click', '.submit-btn', function(){
+		submitTransfer($(this).closest('tr'));
+	});
+
+	// 批量转账
+	$('#startsend').click(function(){
+		var btn = $(this);
+		var items = $('#list tr:has(input[type="checkbox"]:checked)');
+		var total = items.length;
+		var processed = 0;
+		if(btn.attr('disabled')) return;
+		
+		if(total == 0) return alert('请选择要转账的记录');
+		
+		// 禁用所有相关按钮
+		btn.attr('disabled', true);
+		$('#importExcel').prop('disabled', true);
+		$('.submit-btn').prop('disabled', true);
+		
+		function processNext(index){
+			if(index >= total) {
+				// 恢复所有按钮状态
+				btn.attr('disabled', false);
+				$('#importExcel').prop('disabled', false);
+				$('.submit-btn').prop('disabled', false);
+				return;
+			}
+			
+			var item = items.eq(index);
+			submitTransfer(item, function(rescode){
+				if(rescode) {
+					$('#donenum').text(++processed);
+					processNext(index+1);
+				} else {
+					// 付款方原因失败时恢复按钮状态
+					btn.attr('disabled', false);
+					$('#importExcel').prop('disabled', false);
+					$('.submit-btn').prop('disabled', false);
+				}
+			});
+		}
+		
+		processNext(0);
+	});
+});
+</script>
 	</table>
 </div>
 </div>
     </div>
-<?php }?>
   </div>

@@ -46,9 +46,9 @@ unset($rs);
 </div>
  </div>
 </div>
-<script src="<?php echo $cdnpublic?>layer/3.1.1/layer.min.js"></script>
-<script src="<?php echo $cdnpublic?>bootstrap-datepicker/1.9.0/js/bootstrap-datepicker.min.js"></script>
-<script src="<?php echo $cdnpublic?>bootstrap-datepicker/1.9.0/locales/bootstrap-datepicker.zh-CN.min.js"></script>
+<script src="<?php echo $cdnpublic?>layer/3.1.1/layer.js"></script>
+<script src="<?php echo $cdnpublic?>bootstrap-datepicker/1.10.0/js/bootstrap-datepicker.min.js"></script>
+<script src="<?php echo $cdnpublic?>bootstrap-datepicker/1.10.0/locales/bootstrap-datepicker.zh-CN.min.js"></script>
 <script>
 function exportOrder(){
 	var starttime = $("input[name='starttime']").val();

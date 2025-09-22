@@ -73,11 +73,9 @@ if ($isqrcode && ($conf['cert_open']==1 || $conf['cert_open']==5)) {
 	<li style="width: 25%;" align="center">
 		<a href="userinfo.php?mod=account">修改密码</a>
 	</li>
-	<?php if($conf['cert_channel']){?>
 	<li style="width: 25%;" align="center" class="active">
 		<a href="certificate.php">实名认证</a>
 	</li>
-	<?php }?>
 </ul>
 <?php
 if($conf['cert_open']==2 && $userrow['cert']!=1){
@@ -192,15 +190,21 @@ if($conf['cert_open']==2 && $userrow['cert']!=1){
 					</div>
 				</div>
 				<div class="form-group">
-					<label class="col-sm-2 control-label">真实姓名</label>
+					<label class="col-sm-2 control-label">证件类型</label>
 					<div class="col-sm-9">
-						<input class="form-control" type="text" name="certname" value="">
+						<select class="form-control" name="certcardtype"><option value="0">大陆居民身份证</option><?php if($conf['cert_open']==1){?><option value="1">港澳通行证</option><option value="2">台湾通行证</option><option value="3">港澳居住证</option><option value="4">台湾居住证</option><option value="5">外国人永居证</option><?php }?></select>
 					</div>
 				</div>
 				<div class="form-group">
-					<label class="col-sm-2 control-label">身份证号</label>
+					<label class="col-sm-2 control-label">证件号码</label>
 					<div class="col-sm-9">
 						<input class="form-control" type="text" name="certno" value="">
+					</div>
+				</div>
+				<div class="form-group">
+					<label class="col-sm-2 control-label">真实姓名</label>
+					<div class="col-sm-9">
+						<input class="form-control" type="text" name="certname" value="">
 					</div>
 				</div>
 				<div class="form-group">
@@ -213,8 +217,7 @@ if($conf['cert_open']==2 && $userrow['cert']!=1){
 				</div>
 			</form>
 			<div class="alert alert-warning alert-dismissible" role="alert" style="line-height: 26px;font-size: 13px;margin-top: 50px;">
-<p>1、为了更好的享受<?php echo $conf['sitename']?>提供的服务，本人知晓并同意授权<?php if($conf['cert_open']==4){?>微信的实名认证<?php }else{?>支付宝的实名认证<?php }?>方式用于验证本人信息的真实性</p>
-<p>2、本站承诺任何在本网站提交的用户信息，仅限用于本站为用户提供服务，本站承诺为用户的隐私及其他个人信息采取严格保密措施，并在必要时销毁数据。</p>
+<p>实名认证是使用<?php if($conf['cert_open']==4){?>微信<?php }else{?>支付宝<?php }?>扫码快捷认证的方式，无需人工审核，本站承诺为用户的隐私及其他个人信息采取严格保密措施，请放心填写。</p>
 			</div>
 			</div>
 <?php }elseif($page=='corpinput'){?>
@@ -264,8 +267,7 @@ if($conf['cert_open']==2 && $userrow['cert']!=1){
 				</div>
 			</form>
 			<div class="alert alert-warning alert-dismissible" role="alert" style="line-height: 26px;font-size: 13px;margin-top: 50px;">
-<p>1、为了更好的享受<?php echo $conf['sitename']?>提供的服务，本人知晓并同意授权<?php if($conf['cert_open']==4){?>微信的实名认证<?php }else{?>支付宝的实名认证<?php }?>方式用于验证本人信息的真实性</p>
-<p>2、本站承诺任何在本网站提交的用户信息，仅限用于本站为用户提供服务，本站承诺为用户的隐私及其他个人信息采取严格保密措施，并在必要时销毁数据。</p>
+<p>实名认证是使用法人<?php if($conf['cert_open']==4){?>微信<?php }else{?>支付宝<?php }?>扫码快捷认证的方式，无需人工审核，本站承诺为用户的隐私及其他个人信息采取严格保密措施，请放心填写。</p>
 			</div>
 			</div>
 <?php }elseif($page=='typeselect'){?>
@@ -302,7 +304,7 @@ if($conf['cert_open']==2 && $userrow['cert']!=1){
     </div>
   </div>
 <?php include 'foot.php';?>
-<script src="<?php echo $cdnpublic?>layer/3.1.1/layer.min.js"></script>
+<script src="<?php echo $cdnpublic?>layer/3.1.1/layer.js"></script>
 <script src="<?php echo $cdnpublic?>jquery.qrcode/1.0/jquery.qrcode.min.js"></script>
 <script>
 <?php if($isqrcode){?>
@@ -342,6 +344,7 @@ $(document).ready(function(){
 		var certno=$("input[name='certno']").val();
 		var certcorpname=$("input[name='certcorpname']").val();
 		var certcorpno=$("input[name='certcorpno']").val();
+		var certcardtype=$("select[name='certcardtype']").val();
 		var csrf_token=$("input[name='csrf_token']").val();
 		if(certname=='' || certno==''){
 			layer.alert('请确保各项不能为空');return false;
@@ -350,7 +353,7 @@ $(document).ready(function(){
 		$.ajax({
 			type : "POST",
 			url : "ajax2.php?act=certificate",
-			data : {certtype:certtype,certname:certname,certno:certno,certcorpname:certcorpname,certcorpno:certcorpno,csrf_token:csrf_token},
+			data : {certtype:certtype,certname:certname,certno:certno,certcorpname:certcorpname,certcorpno:certcorpno,certcardtype:certcardtype,csrf_token:csrf_token},
 			dataType : 'json',
 			success : function(data) {
 				layer.close(ii);

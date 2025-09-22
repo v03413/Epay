@@ -5,7 +5,7 @@ $title='聚合收款';
 include './head.php';
 ?>
 <?php
-if(!$conf['onecode'])exit('未开启聚合收款');
+if(!$conf['onecode'] && $userrow['open_code']!=1)exit('未开启聚合收款');
 
 $merchant = authcode($uid, 'ENCODE', SYS_KEY);
 $code_url = $siteurl.'paypage/?merchant='.urlencode($merchant);
@@ -84,6 +84,7 @@ $code_url = $siteurl.'paypage/?merchant='.urlencode($merchant);
 				<div class="input-group">
 					<span class="input-group-addon">选择收款码风格</span>
 					<select class="form-control" id="styleName">
+					<option value="default">风格0-默认</option>
 					<option value="dongxue">风格1-冬雪</option>
 					<option value="pikaqiu">风格2-皮卡丘</option>
 					<option value="kanuobudingmao">风格3-布叮猫</option>
@@ -117,7 +118,7 @@ $code_url = $siteurl.'paypage/?merchant='.urlencode($merchant);
   </div>
 
 <?php include 'foot.php';?>
-<script src="<?php echo $cdnpublic?>layer/3.1.1/layer.min.js"></script>
+<script src="<?php echo $cdnpublic?>layer/3.1.1/layer.js"></script>
 <script src="<?php echo $cdnpublic?>clipboard.js/1.7.1/clipboard.min.js"></script>
 <script src="<?php echo $cdnpublic?>jquery.qrcode/1.0/jquery.qrcode.min.js"></script>
 <script src="<?php echo $cdnpublic?>jquery-cookie/1.4.1/jquery.cookie.min.js"></script>

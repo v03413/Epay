@@ -18,6 +18,7 @@ unset($rs);
 #orderItem .orderTitle{word-break:keep-all;}
 #orderItem .orderContent{word-break:break-all;}
 </style>
+<link href="../assets/css/datepicker.css" rel="stylesheet">
   <div class="container" style="padding-top:70px;">
     <div class="col-md-12 center-block" style="float: none;">
 <div class="modal" id="modal-rmb">
@@ -54,9 +55,79 @@ unset($rs);
 		</div>
 	</div>
 </div>
+<div class="modal" id="modal-advance">
+	<div class="modal-dialog" role="document">
+		<div class="modal-content">
+			<div class="modal-header">
+				<button type="button" class="close" data-dismiss="modal" aria-label="Close">
+					<span aria-hidden="true">&times;</span>
+				</button>
+				<h4 class="modal-title">高级搜索</h4>
+			</div>
+			<div class="modal-body">
+				<form id="form-advance" onsubmit="return false;">
+					<input type="hidden" name="uid" value="">
+					<div class="form-group">
+						<div class="input-group">
+							<span class="input-group-addon p-0">
+								超过
+							</span>
+							<input type="number" class="form-control" name="days" placeholder="输入天数" value="30">
+							<span class="input-group-addon">天无订单的用户</span>
+						</div>
+					</div>
+				</form>
+			</div>
+			<div class="modal-footer">
+				<button type="button" class="btn btn-outline-info" data-dismiss="modal">取消</button>
+				<button type="button" class="btn btn-primary" id="advance_search">查找</button>
+			</div>
+		</div>
+	</div>
+</div>
+<div class="modal" id="modal-export">
+	<div class="modal-dialog" role="document">
+		<div class="modal-content">
+			<div class="modal-header">
+				<button type="button" class="close" data-dismiss="modal" aria-label="Close">
+					<span aria-hidden="true">&times;</span>
+				</button>
+				<h4 class="modal-title">导出用户</h4>
+			</div>
+			<div class="modal-body">
+<?php
+$select = '<option value="">全部用户组</option>';
+$rs = $DB->getAll("SELECT * FROM pre_group");
+foreach($rs as $row){
+	$select .= '<option value="'.$row['gid'].'">'.$row['name'].'</option>';
+}
+unset($rs);
+?>
+				<form action="" id="exportUser" method="POST" onsubmit="return exportUser()" role="form">
+					<div class="form-group">
+						<div class="input-group"><div class="input-group-addon">用户组</div>
+						<select name="gid" class="form-control"><?php echo $select?></select>
+					</div></div>
+					<div class="form-group">
+						<div class="input-group input-daterange"><div class="input-group-addon">注册时间</div>
+						<input type="text" id="starttime" name="starttime" class="form-control" placeholder="开始日期" autocomplete="off">
+						<span class="input-group-addon"><i class="fa fa-chevron-right"></i></span>
+						<input type="text" id="endtime" name="endtime" class="form-control" placeholder="结束日期" autocomplete="off">
+					</div></div>
+					<div class="form-group">
+						<div class="input-group"><div class="input-group-addon">用户状态</div>
+						<select name="dstatus" class="form-control"><option value="">全部状态</option><option value="1">正常状态</option></select>
+					</div></div>
+					<p><input type="submit" name="submit" value="导出" class="btn btn-primary form-control"/></p>
+				</form>
+			</div>
+		</div>
+	</div>
+</div>
 <form onsubmit="return searchSubmit()" method="GET" class="form-inline" id="searchToolbar">
 <input type="hidden" class="form-control" name="gid">
 <input type="hidden" class="form-control" name="upid">
+<input type="hidden" class="form-control" name="order_days">
   <div class="form-group">
     <label>搜索</label>
 	<select name="column" class="form-control"><option value="uid">商户号</option><option value="key">密钥</option><option value="account">结算账号</option><option value="username">结算姓名</option><option value="url">域名</option><option value="qq">QQ</option><option value="phone">手机号码</option><option value="email">邮箱</option></select>
@@ -65,10 +136,16 @@ unset($rs);
     <input type="text" class="form-control" name="value" placeholder="搜索内容">
   </div>
   <div class="form-group">
-	<select name="dstatus" class="form-control"><option value="0">全部用户</option><option value="pay_2">待审核用户</option><option value="status_1">用户状态正常</option><option value="status_0">用户状态封禁</option><option value="pay_1">支付状态正常</option><option value="pay_0">支付状态关闭</option><option value="settle_1">结算状态正常</option><option value="settle_0">结算状态关闭</option></select>
+	<select name="dstatus" class="form-control"><option value="0">全部用户</option><option value="pay_2">待审核用户</option><option value="status_1">用户状态正常</option><option value="status_0">用户状态封禁</option><option value="pay_1">支付状态正常</option><option value="pay_0">支付状态关闭</option><option value="settle_1">结算状态正常</option><option value="settle_0">结算状态关闭</option><option value="cert_1">已实名认证</option><option value="cert_0">未实名认证</option></select>
   </div>
-  <button type="submit" class="btn btn-primary">搜索</button>&nbsp;<a href="./uset.php?my=add" class="btn btn-success">添加商户</a>
+  <div class="form-group">
+	<select name="order" class="form-control"><option value="">商户号倒序</option><option value="money_desc">余额倒序</option><option value="money_asc">余额正序</option><option value="lasttime_desc">登录时间倒序</option><option value="lasttime_asc">登录时间正序</option></select>
+  </div>
+  <button type="submit" class="btn btn-primary">搜索</button>
+  <a href="javascript:advance()" class="btn btn-default">高级搜索</a>
+  <a href="./uset.php?my=add" class="btn btn-success">添加商户</a>
   <a href="javascript:searchClear()" class="btn btn-default" title="刷新用户列表"><i class="fa fa-refresh"></i></a>
+  <a href="javascript:$('#modal-export').modal('show')" class="btn btn-default">导出</a>
 </form>
 
       <table id="listTable">
@@ -77,6 +154,8 @@ unset($rs);
   </div>
 <script src="<?php echo $cdnpublic?>layer/3.1.1/layer.js"></script>
 <script src="<?php echo $cdnpublic?>clipboard.js/1.7.1/clipboard.min.js"></script>
+<script src="<?php echo $cdnpublic?>bootstrap-datepicker/1.10.0/js/bootstrap-datepicker.min.js"></script>
+<script src="<?php echo $cdnpublic?>bootstrap-datepicker/1.10.0/locales/bootstrap-datepicker.zh-CN.min.js"></script>
 <script src="../assets/js/bootstrap-table.min.js"></script>
 <script src="../assets/js/bootstrap-table-page-jump-to.min.js"></script>
 <script src="../assets/js/custom.js"></script>
@@ -100,7 +179,7 @@ $(document).ready(function(){
 				formatter: function(value, row, index) {
 					let groupname = row.groupname;
 					if(groupname!=null && groupname.length > 14) groupname = groupname.substring(0,14);
-					return '<b>'+value+'</b>[<a href="javascript:showKey('+value+',\''+row.key+'\')">查看密钥</a>]<br/><span onclick="editGroup('+value+','+row.gid+',\''+row.endtime+'\')" style="color:blue" title="到期时间：'+(row.endtime==null?'永久':row.endtime)+'">'+groupname+'</span>';
+					return '<b>'+value+'</b><br/><span onclick="editGroup('+value+','+row.gid+',\''+row.endtime+'\')" style="color:blue" title="到期时间：'+(row.endtime==null?'永久':row.endtime)+'">'+groupname+'</span>';
 				}
 			},
 			{
@@ -114,7 +193,8 @@ $(document).ready(function(){
 				field: 'settle_id',
 				title: '结算账号/姓名',
 				formatter: function(value, row, index) {
-					return row.account ? '<span onclick="inputInfo('+row.uid+')" title="点击修改结算账号">'+(value==2?'<font color="green">WX:</font>':'')+(value==3?'<font color="green">QQ:</font>':'')+row.account+'<br/>'+row.username+'</span>' : '<span onclick="inputInfo('+row.uid+')" title="点击修改结算账号">未设置</span>';
+					var type_arr = {1:'alipay',2:'wxpay',3:'qqpay',4:'bank'};
+					return row.account ? '<span onclick="inputInfo('+row.uid+')" title="点击修改结算账号">'+(value==2?'<font color="green">WX:</font>':'')+(value==3?'<font color="green">QQ:</font>':'')+row.account+'<br/>'+row.username+'</span> <a href="./transfer_add.php?app='+type_arr[value]+'&account='+row.account+'&username='+row.username+'" target="_blank"><i class="fa fa-send-o fa-fw"></i></a>' : '<span onclick="inputInfo('+row.uid+')" title="点击修改结算账号">未设置</span>';
 				}
 			},
 			{
@@ -126,9 +206,9 @@ $(document).ready(function(){
 			},
 			{
 				field: 'url',
-				title: '域名/添加时间',
+				title: '注册时间/域名',
 				formatter: function(value, row, index) {
-					return (value?value:'')+(pay_domain=='true'?' [<a href="./domain.php?uid='+row.uid+'" target="_blank" >域名</a>]':'')+'<br/>'+row.addtime;
+					return row.addtime+'<br/>'+(value?value:'')+(pay_domain=='true'?' [<a href="./domain.php?uid='+row.uid+'" target="_blank" >域名</a>]':'');
 				}
 			},
 			{
@@ -168,7 +248,7 @@ $(document).ready(function(){
 				field: '',
 				title: '操作',
 				formatter: function(value, row, index) {
-					return '<a href="./uset.php?my=edit&uid='+row.uid+'" class="btn btn-xs btn-info">编辑</a>&nbsp;<a href="./sso.php?uid='+row.uid+'" target="_blank" class="btn btn-xs btn-success">登录</a>&nbsp;<a href="javascript:delUser('+row.uid+')" class="btn btn-xs btn-danger">删除</a><br/><a href="./order.php?uid='+row.uid+'" target="_blank" class="btn btn-xs btn-default">订单</a>&nbsp;<a href="./slist.php?uid='+row.uid+'" target="_blank" class="btn btn-xs btn-default">结算</a>&nbsp;<a href="./record.php?column=uid&value='+row.uid+'" target="_blank" class="btn btn-xs btn-default">明细</a>';
+					return '<a href="./uset.php?my=edit&uid='+row.uid+'" class="btn btn-xs btn-info">编辑</a>&nbsp;<a href="./sso.php?uid='+row.uid+'" target="_blank" class="btn btn-xs btn-success">登录</a>&nbsp;<a href="javascript:delUser('+row.uid+')" class="btn btn-xs btn-danger">删除</a><br/><a href="./order.php?uid='+row.uid+'" target="_blank" class="btn btn-xs btn-default">订单</a>&nbsp;<a href="./slist.php?uid='+row.uid+'" target="_blank" class="btn btn-xs btn-default">结算</a>&nbsp;<a href="./record.php?uid='+row.uid+'" target="_blank" class="btn btn-xs btn-default">明细</a>';
 				}
 			},
 		],
@@ -409,6 +489,9 @@ function delUser(uid) {
 	  layer.close(confirmobj);
 	});
 }
+function advance() {
+	$('#modal-advance').modal('show');
+}
 $(document).ready(function(){
 	$("#recharge").click(function(){
 		var uid=$("input[name='uid']").val();
@@ -437,5 +520,28 @@ $(document).ready(function(){
 			}
 		});
 	});
+	$("#advance_search").click(function(){
+		var days = $("#form-advance input[name='days']").val();
+		if(days == '' || days == '0'){
+			layer.alert('请输入天数！');return false;
+		}
+		$("#searchToolbar input[name='order_days']").val(days);
+		searchSubmit();
+		$('#modal-advance').modal('hide');
+	});
+	$('.input-datepicker, .input-daterange').datepicker({
+        format: 'yyyy-mm-dd',
+		autoclose: true,
+        clearBtn: true,
+        language: 'zh-CN'
+    });
 })
+function exportUser(){
+	var starttime = $("#exportUser input[name='starttime']").val();
+	var endtime = $("#exportUser input[name='endtime']").val();
+	var gid = $("#exportUser select[name='gid']").val();
+	var dstatus = $("#exportUser select[name='dstatus']").val();
+	window.location.href='./download.php?act=user&starttime='+starttime+'&endtime='+endtime+'&gid='+gid+'&dstatus='+dstatus;
+	return false;
+}
 </script>

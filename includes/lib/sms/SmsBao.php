@@ -10,7 +10,7 @@ class SmsBao {
         $this->pass = $pass;
     }
 
-    public function send($phone, $code, $moban, $sign){
+    public function send($phone, $param, $moban, $sign){
         if(empty($this->user)||empty($this->pass))return false;
         $statusStr = array(
             "0" => "短信发送成功",
@@ -23,7 +23,10 @@ class SmsBao {
             "43" => "IP地址限制",
             "50" => "内容含有敏感词"
         );
-        $content = '【'.$sign.'】'.str_replace('{code}',$code,$moban);
+        foreach($param as $k=>$v){
+            $moban = str_replace('{'.$k.'}',$v,$moban);
+        }
+        $content = '【'.$sign.'】'.$moban;
         $sendurl = "http://api.smsbao.com/sms?u=".$this->user."&p=".md5($this->pass)."&m=".$phone."&c=".urlencode($content);
         $result = get_curl($sendurl) ;
         if ($result == '0'){

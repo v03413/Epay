@@ -34,8 +34,19 @@ case 'settleList':
 	$limit = intval($_POST['limit']);
 	$total = $DB->getColumn("SELECT count(*) from pre_settle WHERE{$sql}");
 	$list = $DB->getAll("SELECT * FROM pre_settle WHERE{$sql} order by id desc limit $offset,$limit");
+	$list2 = [];
+	foreach($list as $row){
+		if($row['type'] == 2 && $row['status'] == 1 && !empty($row['transfer_ext']) && time() - strtotime($row['transfer_date']) <= 86400){
+			if(substr($row['ext'], 0, 4) == 'http'){
+				$row['jumpurl'] = $row['ext'];
+			}else{
+				$row['jumpurl'] = $siteurl.'paypage/wxtrans.php?id='.$row['id'].'&type=settle';
+			}
+		}
+		$list2[] = $row;
+	}
 
-	exit(json_encode(['total'=>$total, 'rows'=>$list]));
+	exit(json_encode(['total'=>$total, 'rows'=>$list2]));
 break;
 
 case 'create_batch':
@@ -170,16 +181,7 @@ break;
 case 'transfer':
 	$id = isset($_POST['id'])?intval($_POST['id']):exit('{"code":-1,"msg":"ID不能为空"}');
 	$type = isset($_POST['type'])?intval($_POST['type']):exit('{"code":-1,"msg":"type不能为空"}');
-
-	$payee_err_code = [ //收款方原因导致的失败编码
-		'PAYEE_NOT_EXIST','PAYEE_ACCOUNT_STATUS_ERROR','CARD_BIN_ERROR','PAYEE_CARD_INFO_ERROR','PERM_AML_NOT_REALNAME_REV','PAYEE_USER_INFO_ERROR','PAYEE_ACC_OCUPIED','PERMIT_NON_BANK_LIMIT_PAYEE','PAYEE_TRUSTEESHIP_ACC_OVER_LIMIT','PAYEE_ACCOUNT_NOT_EXSIT','PAYEE_USERINFO_STATUS_ERROR','TRUSTEESHIP_RECIEVE_QUOTA_LIMIT','EXCEED_LIMIT_UNRN_DM_AMOUNT','INVALID_CARDNO','RELEASE_USER_FORBBIDEN_RECIEVE','PAYEE_USER_TYPE_ERROR','PAYEE_NOT_RELNAME_CERTIFY','PERMIT_LIMIT_PAYEE',
-
-		'OPENID_ERROR','NAME_MISMATCH','V2_ACCOUNT_SIMPLE_BAN','MONEY_LIMIT','EXCEED_PAYEE_ACCOUNT_LIMIT','PAYEE_ACCOUNT_ABNORMAL','APPID_OR_OPENID_ERR',
-
-		'REALNAME_CHECK_ERROR','RE_USER_NAME_CHECK_ERROR','ERR_TJ_BLACK','USER_FROZEN','TRANSFER_FAIL','TRANSFER_FEE_LIMIT_ERROR',
-
-		'ACCOUNT_FROZEN','REAL_NAME_CHECK_FAIL','NAME_NOT_CORRECT','OPENID_INVALID','TRANSFER_QUOTA_EXCEED','DAY_RECEIVED_QUOTA_EXCEED','MONTH_RECEIVED_QUOTA_EXCEED','DAY_RECEIVED_COUNT_EXCEED','ID_CARD_NOT_CORRECT','ACCOUNT_NOT_EXIST','TRANSFER_RISK','REALNAME_ACCOUNT_RECEIVED_QUOTA_EXCEED','RECEIVE_ACCOUNT_NOT_PERMMIT','PAYEE_ACCOUNT_ABNORMAL','BLOCK_B2C_USERLIMITAMOUNT_BSRULE_MONTH','BLOCK_B2C_USERLIMITAMOUNT_MONTH',
-	];
+	$channelid = isset($_POST['channel'])?intval($_POST['channel']):0;
 
 	if(!isset($_SESSION['paypwd']) || $_SESSION['paypwd']!==$conf['admin_paypwd'])exit('{"code":-1,"msg":"支付密码错误，请返回重新进入该页面"}');
 
@@ -191,31 +193,35 @@ case 'transfer':
 
 	if($type == 1){
 		$app = 'alipay';
-		$channel = \lib\Channel::get($conf['transfer_alipay']);
 	}elseif($type == 2){
 		$app = 'wxpay';
-		$channel = \lib\Channel::get($conf['transfer_wxpay']);
 	}elseif($type == 3){
 		$app = 'qqpay';
-		$channel = \lib\Channel::get($conf['transfer_qqpay']);
 	}elseif($type == 4){
 		$app = 'bank';
-		$channel = \lib\Channel::get($conf['transfer_bank']);
 	}
+	$channel = \lib\Channel::get($channelid);
 	if(!$channel)exit('{"code":-1,"msg":"当前支付通道信息不存在"}');
 
-	$out_biz_no = date("Ymd").'000'.$id;
+	$out_biz_no = date("YmdHis").str_pad($id, 5, '0', STR_PAD_LEFT);
 	$result = \lib\Transfer::submit($app, $channel, $out_biz_no, $row['account'], $row['username'], $row['realmoney']);
 
 	if($result['code']==0){
 		$data['code']=0;
 		$data['ret']=1;
 		$data['result']='转账订单号:'.$result['orderid'].' 支付时间:'.$result['paydate'];
-		$DB->update('settle', ['status'=>1, 'endtime'=>'NOW()', 'transfer_status'=>1, 'transfer_result'=>$result["orderid"], 'transfer_date'=>$result["paydate"]], ['id'=>$id]);
+		$update = ['status'=>1, 'endtime'=>'NOW()', 'transfer_no'=>$out_biz_no, 'transfer_channel'=>$channelid, 'transfer_status'=>1, 'transfer_result'=>$result["orderid"], 'transfer_date'=>$result["paydate"]];
+		if(isset($result['wxpackage'])) $update['transfer_ext'] = $result['wxpackage'];
+		$DB->update('settle', $update, ['id'=>$id]);
 
-		\lib\MsgNotice::send('settle', $row['uid'], ['money'=>$row['money'], 'realmoney'=>$row['realmoney'], 'time'=>date('Y-m-d H:i:s'), 'account'=>$row['account']]);
+		if(isset($result['wxpackage'])) {
+			$jumpurl = $siteurl.'paypage/wxtrans.php?type=settle&id='.$id;
+			\lib\MsgNotice::send('settle', $row['uid'], ['money'=>$row['money'], 'realmoney'=>$row['realmoney'], 'time'=>date('Y-m-d H:i:s'), 'account'=>$row['account'], 'jumpurl'=>$jumpurl]);
+		}else{
+			\lib\MsgNotice::send('settle', $row['uid'], ['money'=>$row['money'], 'realmoney'=>$row['realmoney'], 'time'=>date('Y-m-d H:i:s'), 'account'=>$row['account']]);
+		}
 	} else {
-		if(in_array($result['errcode'], $payee_err_code)){
+		if(in_array($result['errcode'], \lib\Transfer::$payee_err_code)){
 			$data['code']=0;
 			$data['ret']=0;
 			$data['result']='转账失败 '.$result['msg'];

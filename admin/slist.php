@@ -8,6 +8,7 @@ include './head.php';
 if($islogin==1){}else exit("<script language='javascript'>window.location.href='./login.php';</script>");
 ?>
   <div class="container" style="padding-top:70px;">
+	<div class="row">
     <div class="col-md-12 center-block" style="float: none;">
 
 <form onsubmit="return searchSubmit()" method="GET" class="form-inline" id="searchToolbar">
@@ -23,7 +24,7 @@ if($islogin==1){}else exit("<script language='javascript'>window.location.href='
 	<select name="type" class="form-control"><option value="0">所有结算方式</option><option value="1">支付宝</option><option value="2">微信</option><option value="3">QQ钱包</option><option value="4">银行卡</option></select>
   </div>
   <div class="form-group">
-	<select name="dstatus" class="form-control"><option value="-1">全部状态</option><option value="0">状态待结算</option><option value="1">状态已完成</option><option value="2">状态正在结算</option><option value="3">状态结算失败</option></select>
+	<select name="dstatus" class="form-control"><option value="-1">全部状态</option><option value="0">待结算</option><option value="1">已完成</option><option value="2">正在结算</option><option value="3">结算失败</option></select>
   </div>
   <button type="submit" class="btn btn-primary">搜索</button>
   <a href="settle.php" class="btn btn-success">批量结算</a>
@@ -38,7 +39,9 @@ if($islogin==1){}else exit("<script language='javascript'>window.location.href='
 	  </table>
     </div>
   </div>
-<script src="<?php echo $cdnpublic?>layer/3.1.1/layer.min.js"></script>
+  </div>
+<script src="<?php echo $cdnpublic?>layer/3.1.1/layer.js"></script>
+<script src="<?php echo $cdnpublic?>jquery.qrcode/1.0/jquery.qrcode.min.js"></script>
 <script src="../assets/js/bootstrap-table.min.js"></script>
 <script src="../assets/js/bootstrap-table-page-jump-to.min.js"></script>
 <script src="../assets/js/custom.js"></script>
@@ -86,6 +89,8 @@ $(document).ready(function(){
 						typename='<img src="/assets/icon/qqpay.ico" width="16" onerror="this.style.display=\'none\'">QQ钱包';
 					}else if(value == '4'){
 						typename='<img src="/assets/icon/bank.ico" width="16" onerror="this.style.display=\'none\'">银行卡';
+					}else if(value == '5'){
+						typename='支付机构';
 					}
 					if(row.auto!=1) typename+='<small>[手动]</small>'
 					return typename;
@@ -95,7 +100,11 @@ $(document).ready(function(){
 				field: 'account',
 				title: '结算账号/姓名',
 				formatter: function(value, row, index) {
-					return '<span onclick="inputInfo('+row.id+')" title="点击直接修改">'+value+'&nbsp;'+row.username+'</span>';
+					if(row.type == '5'){
+						return value+'&nbsp;'+row.username;
+					}else{
+						return '<span onclick="inputInfo('+row.id+')" title="点击直接修改">'+value+'&nbsp;'+row.username+'</span>';
+					}
 				}
 			},
 			{
@@ -118,7 +127,7 @@ $(document).ready(function(){
 				title: '状态',
 				formatter: function(value, row, index) {
 					if(value == '1'){
-						return '<font color=green>已完成</font>';
+						return '<font color=green>已完成</font>' + (row.jumpurl ? '<br/><a href="javascript:showQrcode(\''+row.jumpurl+'\')" class="btn btn-xs btn-success"><i class="fa fa-qrcode"></i> 确认收款</a>' : '');
 					}else if(value == '2'){
 						return '<font color=orange>正在结算</font>';
 					}else if(value == '3'){
@@ -294,6 +303,25 @@ function saveInfo(id) {
 			}
 			$('#save').val('保存');
 		} 
+	});
+}
+function showQrcode(url){
+	layer.open({
+		type: 1,
+		title: '收款方使用微信扫描以下二维码',
+		skin: 'layui-layer-demo',
+		shadeClose: true,
+		content: '<div id="qrcode" class="list-group-item text-center"></div>',
+		success: function(){
+			$('#qrcode').qrcode({
+				text: url,
+				width: 230,
+				height: 230,
+				foreground: "#000000",
+				background: "#ffffff",
+				typeNumber: -1
+			});
+		}
 	});
 }
 </script>

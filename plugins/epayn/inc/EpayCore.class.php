@@ -53,7 +53,14 @@ class EpayCore
         $path = ltrim($path, '/');
         $requrl = $this->apiurl.$path;
         $param = $this->buildRequestParam($params);
-        $response = $this->getHttpResponse($requrl, http_build_query($param));
+        $isMultipart = false;
+        foreach ($param as $v) {
+            if($v instanceof \CURLFile){
+                $isMultipart = true;
+                break;
+            }
+        }
+        $response = $this->getHttpResponse($requrl, $isMultipart ? $param : http_build_query($param));
         $arr = json_decode($response, true);
         if($arr && $arr['code'] == 0){
             if(!$this->verify($arr)){
@@ -131,7 +138,7 @@ class EpayCore
         ksort($params);
         $signstr = '';
         foreach ($params as $k => $v) {
-            if(is_array($v) || $this->isEmpty($v) || $k == 'sign' || $k == 'sign_type') continue;
+            if($v instanceof \CURLFile || is_array($v) || $this->isEmpty($v) || $k == 'sign' || $k == 'sign_type') continue;
             $signstr .= '&' . $k . '=' . $v;
         }
         $signstr = substr($signstr, 1);

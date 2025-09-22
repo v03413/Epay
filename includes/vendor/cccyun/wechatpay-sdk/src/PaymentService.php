@@ -2,13 +2,15 @@
 
 namespace WeChatPay;
 
+use Exception;
+
 /**
  * 基础支付服务类
  * @see https://pay.weixin.qq.com/wiki/doc/api/index.html
  */
 class PaymentService extends BaseService
 {
-    public function __construct($config)
+    public function __construct(array $config)
     {
         parent::__construct($config);
 
@@ -26,12 +28,13 @@ class PaymentService extends BaseService
         }
     }
 
-    /**
-     * 统一下单
-     * @param $params 下单参数
-     * @return mixed
-     */
-    public function unifiedOrder($params)
+	/**
+	 * 统一下单
+	 * @param array $params 下单参数
+	 * @return mixed
+	 * @throws Exception
+	 */
+    public function unifiedOrder(array $params)
     {
         $url = 'https://api.mch.weixin.qq.com/pay/unifiedorder';
         if (empty($params['out_trade_no'])) {
@@ -49,12 +52,13 @@ class PaymentService extends BaseService
         return $this->execute($url, $params);
     }
 
-    /**
-     * NATIVE支付
-     * @param $params 下单参数
-     * @return mixed {"code_url":"二维码链接"}
-     */
-    public function nativePay($params)
+	/**
+	 * NATIVE支付
+	 * @param array $params 下单参数
+	 * @return mixed {"code_url":"二维码链接"}
+	 * @throws Exception
+	 */
+    public function nativePay(array $params)
     {
         if (empty($params['product_id'])) {
             throw new \InvalidArgumentException('缺少NATIVE支付必填参数product_id');
@@ -63,12 +67,13 @@ class PaymentService extends BaseService
         return $this->unifiedOrder($params);
     }
 
-    /**
-     * JSAPI支付
-     * @param $params 下单参数
-     * @return array Jsapi支付json数据
-     */
-    public function jsapiPay($params)
+	/**
+	 * JSAPI支付
+	 * @param array $params 下单参数
+	 * @return array Jsapi支付json数据
+	 * @throws Exception
+	 */
+    public function jsapiPay(array $params)
     {
         if (empty($params['openid'])) {
             throw new \InvalidArgumentException('缺少JSAPI支付必填参数openid');
@@ -80,10 +85,10 @@ class PaymentService extends BaseService
 
     /**
      * 获取JSAPI支付的参数
-     * @param $prepay_id 预支付交易会话标识
+     * @param string $prepay_id 预支付交易会话标识
      * @return array json数据
      */
-    private function getJsApiParameters($prepay_id)
+    private function getJsApiParameters(string $prepay_id): array
     {
         $params = [
             'appId' => $this->appId,
@@ -96,12 +101,13 @@ class PaymentService extends BaseService
         return $params;
     }
 
-    /**
-     * APP支付
-     * @param $params 下单参数
-     * @return mixed APP支付json数据
-     */
-    public function appPay($params)
+	/**
+	 * APP支付
+	 * @param array $params 下单参数
+	 * @return array APP支付json数据
+	 * @throws Exception
+	 */
+    public function appPay(array $params): array
     {
         $params['trade_type'] = 'APP';
         $result = $this->unifiedOrder($params);
@@ -110,10 +116,10 @@ class PaymentService extends BaseService
 
     /**
      * 获取APP支付的参数
-     * @param $prepay_id 预支付交易会话标识
+     * @param string $prepay_id 预支付交易会话标识
      * @return array
      */
-    private function getAppParameters($prepay_id)
+    private function getAppParameters(string $prepay_id): array
     {
         $params = [
             'appid' => $this->appId,
@@ -127,23 +133,25 @@ class PaymentService extends BaseService
         return $params;
     }
 
-    /**
-     * H5支付
-     * @param $params 下单参数
-     * @return mixed {"mweb_url":"支付跳转链接"}
-     */
-    public function h5Pay($params)
+	/**
+	 * H5支付
+	 * @param array $params 下单参数
+	 * @return mixed {"mweb_url":"支付跳转链接"}
+	 * @throws Exception
+	 */
+    public function h5Pay(array $params)
     {
         $params['trade_type'] = 'MWEB';
         return $this->unifiedOrder($params);
     }
 
-    /**
-     * 付款码支付
-     * @param $params 下单参数
-     * @return mixed {"openid":"用户标识","is_subscribe":"N","total_fee":888,"cash_fee":888,"transaction_id":"微信支付订单号","out_trade_no":"商户订单号","time_end":"支付完成时间"}
-     */
-    public function microPay($params)
+	/**
+	 * 付款码支付
+	 * @param array $params 下单参数
+	 * @return mixed {"openid":"用户标识","is_subscribe":"N","total_fee":888,"cash_fee":888,"transaction_id":"微信支付订单号","out_trade_no":"商户订单号","time_end":"支付完成时间"}
+	 * @throws Exception
+	 */
+    public function microPay(array $params)
     {
         $url = 'https://api.mch.weixin.qq.com/pay/micropay';
         if (empty($params['out_trade_no'])) {
@@ -161,13 +169,14 @@ class PaymentService extends BaseService
         return $this->execute($url, $params);
     }
 
-    /**
-     * 撤销订单
-     * @param $transaction_id 微信订单号
-     * @param $out_trade_no 商户订单号
-     * @return mixed
-     */
-    public function reverse($transaction_id = null, $out_trade_no = null)
+	/**
+	 * 撤销订单
+	 * @param string|null $transaction_id 微信订单号
+	 * @param string|null $out_trade_no 商户订单号
+	 * @return mixed
+	 * @throws Exception
+	 */
+    public function reverse(string $transaction_id = null, string $out_trade_no = null)
     {
         $url = 'https://api.mch.weixin.qq.com/secapi/pay/reverse';
         $params = [];
@@ -179,13 +188,14 @@ class PaymentService extends BaseService
         return $this->execute($url, $params, true);
     }
 
-    /**
-     * 查询订单，微信订单号、商户订单号至少填一个
-     * @param $transaction_id 微信订单号
-     * @param $out_trade_no 商户订单号
-     * @return mixed
-     */
-    public function orderQuery($transaction_id = null, $out_trade_no = null)
+	/**
+	 * 查询订单，微信订单号、商户订单号至少填一个
+	 * @param string|null $transaction_id 微信订单号
+	 * @param string|null $out_trade_no 商户订单号
+	 * @return mixed
+	 * @throws Exception
+	 */
+    public function orderQuery(string $transaction_id = null, string $out_trade_no = null)
     {
         $url = 'https://api.mch.weixin.qq.com/pay/orderquery';
         $params = [];
@@ -199,25 +209,26 @@ class PaymentService extends BaseService
 
     /**
      * 判断订单是否已完成
-     * @param $transaction_id 微信订单号
+     * @param string $transaction_id 微信订单号
      * @return bool
      */
-    public function orderQueryResult($transaction_id)
+    public function orderQueryResult(string $transaction_id): bool
     {
         try {
             $data = $this->orderQuery($transaction_id);
             return $data['trade_state'] == 'SUCCESS' || $data['trade_state'] == 'REFUND';
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             return false;
         }
     }
 
-    /**
-     * 关闭订单
-     * @param $out_trade_no 商户订单号
-     * @return mixed
-     */
-    public function closeOrder($out_trade_no)
+	/**
+	 * 关闭订单
+	 * @param string $out_trade_no 商户订单号
+	 * @return mixed
+	 * @throws Exception
+	 */
+    public function closeOrder(string $out_trade_no)
     {
         $url = 'https://api.mch.weixin.qq.com/pay/orderquery';
         $params = [
@@ -226,12 +237,13 @@ class PaymentService extends BaseService
         return $this->execute($url, $params);
     }
 
-    /**
-     * 申请退款
-     * @param $params
-     * @return mixed
-     */
-    public function refund($params)
+	/**
+	 * 申请退款
+	 * @param array $params
+	 * @return mixed
+	 * @throws Exception
+	 */
+    public function refund(array $params)
     {
         $url = 'https://api.mch.weixin.qq.com/secapi/pay/refund';
         if (empty($params['transaction_id']) && empty($params['out_trade_no'])) {
@@ -249,12 +261,13 @@ class PaymentService extends BaseService
         return $this->execute($url, $params, true);
     }
 
-    /**
-     * 查询退款
-     * @param $params
-     * @return mixed
-     */
-    public function refundQuery($params)
+	/**
+	 * 查询退款
+	 * @param array $params
+	 * @return mixed
+	 * @throws Exception
+	 */
+    public function refundQuery(array $params)
     {
         $url = 'https://api.mch.weixin.qq.com/pay/refundquery';
         if (empty($params['transaction_id']) && empty($params['out_trade_no']) && empty($params['out_refund_no']) && empty($params['refund_id'])) {
@@ -263,12 +276,13 @@ class PaymentService extends BaseService
         return $this->execute($url, $params);
     }
 
-    /**
-     * 下载对账单
-     * @param $params
-     * @return mixed
-     */
-    public function downloadBill($params)
+	/**
+	 * 下载对账单
+	 * @param array $params
+	 * @return mixed
+	 * @throws Exception
+	 */
+    public function downloadBill(array $params)
     {
         $url = 'https://api.mch.weixin.qq.com/pay/downloadbill';
         if (empty($params['bill_date'])) {
@@ -277,12 +291,13 @@ class PaymentService extends BaseService
         return $this->execute($url, $params);
     }
 
-    /**
-     * 下载资金账单
-     * @param $params
-     * @return mixed
-     */
-    public function downloadFundFlow($params)
+	/**
+	 * 下载资金账单
+	 * @param array $params
+	 * @return mixed
+	 * @throws Exception
+	 */
+    public function downloadFundFlow(array $params)
     {
         $url = 'https://api.mch.weixin.qq.com/pay/downloadfundflow';
         if (empty($params['bill_date'])) {
@@ -294,41 +309,42 @@ class PaymentService extends BaseService
         return $this->execute($url, $params);
     }
 
-    /**
-     * 支付结果通知
-     * @return bool|mixed
-     */
+	/**
+	 * 支付结果通知
+	 * @return bool|mixed
+	 * @throws Exception
+	 */
     public function notify()
     {
         $xml = file_get_contents("php://input");
         if (empty($xml)) {
-            throw new \Exception('NO_DATA');
+            throw new Exception('NO_DATA');
         }
         $result = $this->xml2array($xml);
         if (!$result) {
-            throw new \Exception('XML_ERROR');
+            throw new Exception('XML_ERROR');
         }
         if ($result['return_code'] != 'SUCCESS') {
-            throw new \Exception($result['return_msg']);
+            throw new Exception($result['return_msg']);
         }
         if (!$this->checkSign($result)) {
-            throw new \Exception('签名校验失败');
+            throw new Exception('签名校验失败');
         }
         if (!isset($result['transaction_id'])) {
-            throw new \Exception('缺少订单号参数');
+            throw new Exception('缺少订单号参数');
         }
         if (!$this->orderQueryResult($result['transaction_id'])) {
-            throw new \Exception('订单未完成');
+            throw new Exception('订单未完成');
         }
         return $result;
     }
 
     /**
      * 退款结果通知
-     * @param &$errmsg 错误信息
-     * @return bool|mixed
+     * @param array &$errmsg 错误信息
+     * @return bool|string
      */
-    public function refundNotify(&$errmsg)
+    public function refundNotify(array &$errmsg): bool
     {
         $xml = file_get_contents("php://input");
         if (empty($xml)) {
@@ -346,16 +362,15 @@ class PaymentService extends BaseService
         }
         $req_info = base64_decode($result['req_info']);
         $md5_key = md5($this->apiKey);
-        $data = openssl_decrypt($req_info, 'aes-256-ecb', $md5_key);
-        return $data;
+	    return openssl_decrypt($req_info, 'aes-256-ecb', $md5_key);
     }
 
     /**
      * 回复通知
-     * @param $isSuccess 是否成功
-     * @param $msg 失败原因
+     * @param bool $isSuccess 是否成功
+     * @param string|null $msg 失败原因
      */
-    public function replyNotify($isSuccess = true, $msg = '')
+    public function replyNotify(bool $isSuccess = true, ?string $msg = '')
     {
         $data = [];
         if ($isSuccess) {

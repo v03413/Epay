@@ -2,6 +2,8 @@
 
 namespace WeChatPay;
 
+use Exception;
+
 class BaseService
 {
     //SDK版本号
@@ -32,9 +34,9 @@ class BaseService
     protected $publicParams = [];
 
     /**
-     * @param $config 微信支付配置信息
+     * @param array $config 微信支付配置信息
      */
-    public function __construct($config)
+    public function __construct(array $config)
     {
         if (empty($config['appid'])) {
             throw new \InvalidArgumentException('应用APPID不能为空');
@@ -61,12 +63,13 @@ class BaseService
 
     /**
      * 请求接口并解析返回数据
-     * @param $url url
-     * @param $params 请求参数
-     * @param $cert 是否需要证书
+     * @param string $url url
+     * @param array $params 请求参数
+     * @param bool $cert 是否需要证书
      * @return mixed
+     * @throws Exception
      */
-    public function execute($url, $params, $cert = false)
+    public function execute(string $url, array $params, bool $cert = false)
     {
         $params = array_merge($this->publicParams, $params);
         $params['sign'] = $this->makeSign($params);
@@ -76,7 +79,7 @@ class BaseService
         if (isset($result['return_code']) && $result['return_code'] == 'SUCCESS') {
             if (isset($result['result_code']) && $result['result_code'] == 'SUCCESS') {
                 if (isset($result['sign']) && !$this->checkSign($result)) {
-                    throw new \Exception('返回数据验签失败');
+                    throw new Exception('返回数据验签失败');
                 }
                 return $result;
             }
@@ -89,7 +92,7 @@ class BaseService
      * @param $data
      * @return bool
      */
-    protected function checkSign($data)
+    protected function checkSign($data): bool
     {
         if (!isset($data['sign'])) return false;
 
@@ -103,7 +106,7 @@ class BaseService
      * @param $data
      * @return string
      */
-    protected function makeSign($data)
+    protected function makeSign($data): string
     {
         ksort($data);
         $signStr = '';
@@ -128,7 +131,7 @@ class BaseService
      *
      * @return bool
      */
-    protected function isEmpty($value)
+    protected function isEmpty(?string $value): bool
     {
         return $value === null || $value === '';
     }
@@ -136,9 +139,9 @@ class BaseService
     /**
      * 产生随机字符串，不长于32位
      * @param int $length
-     * @return 产生的随机字符串
+     * @return string 产生的随机字符串
      */
-    protected function getNonceStr($length = 32)
+    protected function getNonceStr(int $length = 32): string
     {
         $chars = "abcdefghijklmnopqrstuvwxyz0123456789";
         $str = "";
@@ -153,12 +156,9 @@ class BaseService
      * @param array $data 源数据
      * @return string
      */
-    protected function array2Xml($data)
+    protected function array2Xml(array $data): string
     {
-        if (!is_array($data)) {
-            return false;
-        }
-        $xml = '<xml>';
+	    $xml = '<xml>';
         foreach ($data as $key => $val) {
             $xml .= (is_numeric($val) ? "<{$key}>{$val}</{$key}>" : "<{$key}><![CDATA[{$val}]]></{$key}>");
         }
@@ -170,7 +170,7 @@ class BaseService
      * @param string $xml 源数据
      * @return mixed
      */
-    protected function xml2array($xml)
+    protected function xml2array(string $xml)
     {
         if (!$xml) {
             return false;
@@ -179,15 +179,16 @@ class BaseService
         return json_decode(json_encode(simplexml_load_string($xml, 'SimpleXMLElement', LIBXML_NOCDATA), JSON_UNESCAPED_UNICODE), true);
     }
 
-    /**
-     * 以post方式提交xml到对应的接口url
-     * @param string $url  url
-     * @param string $xml  需要post的xml数据
-     * @param bool $useCert 是否需要证书
-     * @param int $second   url执行超时时间
-     * @return string
-     */
-    protected function curl($url, $xml, $useCert = false, $second = 10)
+	/**
+	 * 以post方式提交xml到对应的接口url
+	 * @param string $url url
+	 * @param mixed $xml 需要post的xml数据
+	 * @param bool $useCert 是否需要证书
+	 * @param int $second url执行超时时间
+	 * @return string
+	 * @throws Exception
+	 */
+    protected function curl(string $url, $xml, bool $useCert = false, int $second = 10): string
     {
         $ch = curl_init();
         $curlVersion = curl_version();
@@ -202,7 +203,7 @@ class BaseService
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         if ($useCert) {
             if (!file_exists($this->sslCertPath) || !file_exists($this->sslKeyPath)) {
-                throw new \Exception('商户证书文件不存在');
+                throw new Exception('商户证书文件不存在');
             }
             //使用证书：cert 与 key 分别属于两个.pem文件
             curl_setopt($ch, CURLOPT_SSLCERTTYPE, 'PEM');
@@ -216,7 +217,7 @@ class BaseService
         if (curl_errno($ch) > 0) {
             $errmsg = curl_error($ch);
             curl_close($ch);
-            throw new \Exception($errmsg, 0);
+            throw new Exception($errmsg, 0);
         }
         curl_close($ch);
         return $data;

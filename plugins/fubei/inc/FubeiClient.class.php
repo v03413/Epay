@@ -1,5 +1,8 @@
 <?php
 
+/**
+ * https://www.yuque.com/51fubei/openapi
+ */
 class FubeiClient
 {
     //支付接口地址
