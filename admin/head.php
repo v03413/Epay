@@ -1,7 +1,7 @@
 <?php
 @header('Content-Type: text/html; charset=UTF-8');
 
-$admin_cdnpublic = 0;
+$admin_cdnpublic = 1;
 if($admin_cdnpublic==1){
 	$cdnpublic = '//lib.baomitu.com/';
 }elseif($admin_cdnpublic==2){
