@@ -108,7 +108,7 @@ CREATE TABLE `pre_plugin` (
   `showname` varchar(60) DEFAULT NULL,
   `author` varchar(60) DEFAULT NULL,
   `link` varchar(255) DEFAULT NULL,
-  `types` varchar(50) DEFAULT NULL,
+  `types` varchar(255) DEFAULT NULL,
   `transtypes` varchar(50) DEFAULT NULL,
  PRIMARY KEY (`name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
