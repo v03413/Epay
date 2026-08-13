@@ -23,7 +23,6 @@ class bepusdt_plugin
             'usdt.bep20',
             'usdc.bep20',
             'usdt.xlayer',
-            'usdt0.xlayer',
             'usdc.xlayer',
             'usdc.base',
             'usdt.solana',
@@ -115,8 +114,7 @@ class bepusdt_plugin
         header('Content-Type: plain/text; charset=utf-8');
 
         $data = json_decode(file_get_contents('php://input'), true);
-        $sign = $data['signature'] ?? '';
-        if ($sign != self::_toSign($data, $channel['appkey'])) {
+        if (!is_array($data) || !self::_verifySignature($data, $channel['appkey'])) {
             // 签名验证失败
 
             exit('fail - sign error');
@@ -160,6 +158,16 @@ class bepusdt_plugin
         return md5($sign . $token);
     }
 
+    private static function _verifySignature(array $parameter, string $token): bool
+    {
+        $signature = $parameter['signature'] ?? null;
+        if (!is_string($signature) || preg_match('/\A[0-9a-f]{32}\z/D', $signature) !== 1) {
+            return false;
+        }
+
+        return hash_equals(self::_toSign($parameter, $token), $signature);
+    }
+
     private static function _post(string $url, array $json)
     {
 
@@ -183,5 +191,4 @@ class bepusdt_plugin
 
         return json_decode($resp, true);
     }
-
 }
